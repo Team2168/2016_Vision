@@ -9,6 +9,8 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <ctime>
+#include <iostream>
+#include <fstream>
 
 #include <syslog.h>
 #include <sys/stat.h>
@@ -64,11 +66,11 @@ const double HeightGroundToPivot = 38.69;
 
 //Thresholding parameters
 int minR = 0;
-int	maxR = 30;
-int	minG = 0;
-int	maxG = 30;
-int	minB = 60;
-int	maxB = 150;
+int	maxR = 60;
+int	minG = 100;
+int	maxG = 200;
+int	minB = 100;
+int	maxB = 200;
 
 //Some common colors to draw with
 const Scalar RED    = Scalar(0,     0, 255),
@@ -127,10 +129,10 @@ int main(int argc, const char* argv[])
         thresholded = ThresholdImage(img);
 
 
-        findTarget(img, thresholded);
+    //    findTarget(img, thresholded);
 
 
-        CalculateDist(img, thresholded);
+      //  CalculateDist(img, thresholded);
 
         #ifdef TIMING
             end_time = clock();
@@ -142,6 +144,7 @@ int main(int argc, const char* argv[])
     #ifdef VISUAIZE
     // Create Window
     NamedWindow("IMAGE", WINDOW_AUTOSIZE);
+    NamedWindow("Treshold", WINDOW_AUTOSIZE);
     #endif
 
 	//cout << "Image center = " << img.size().width/2 << endl;
@@ -149,6 +152,7 @@ int main(int argc, const char* argv[])
 	#ifdef VISUALIZE
 
 	imshow("IMAGE", img);
+	imshow("Treshold", thresholded);
         //halt execution when esc key is pressed
         if(waitKey(30) >= 0)
         	progRun = 1;
@@ -296,6 +300,7 @@ Mat ThresholdImage(Mat original)
 	// a bit and only seems to matter for targets whigh are not fully closed
 	blur(thresholded, thresholded, Size(3, 3));
 	morphologyEx(thresholded, thresholded, MORPH_CLOSE, Mat::ones(3, 3, CV_8U));
+	Canny(thresholded, thresholded, 100, 100, 3);
 
     return thresholded;
 
