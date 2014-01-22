@@ -357,7 +357,7 @@ Mat ThresholdImage(Mat original)
     //Local Temp Image
     Mat thresholded;
 
-    //Threshold image to remove non-blue objects
+    //Threshold image to remove non-green objects
 	inRange(original, Scalar(minB, minG, minR), Scalar(maxB, maxG, maxR), thresholded);
 
 	//smooth edges
@@ -366,9 +366,12 @@ Mat ThresholdImage(Mat original)
 	//detect edges
 	Canny(thresholded, thresholded, 100, 100, 3);
 
-	//blur edges to remove noise
+	//blur edges to remove particle noise, we use blur because it is faster. The proper method to use here is a bilateral filter
+	//because that is the only filter which will preserve edges, however due to the processing time, we opt to use
+	//blur
 	blur(thresholded, thresholded, Size(5, 5));
 
+	//return image
     return thresholded;
 
 }
