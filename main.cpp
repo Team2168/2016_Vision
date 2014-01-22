@@ -15,7 +15,7 @@
 #include <syslog.h>
 #include <sys/stat.h>
 #include <queue>
-#include <sys/socket.h>
+#include <sys/socket.h>e
 #include <unistd.h>
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -114,13 +114,8 @@ int main(int argc, const char* argv[])
     while(progRun)
     {
 
-        #ifdef TIMING
             clock_t start_time, end_time = 0.0;
-        #endif
-
-        #ifdef TIMING
             start_time = clock();
-        #endif
 
 
         img = GetOriginalImage(params);
@@ -134,10 +129,11 @@ int main(int argc, const char* argv[])
 
       //  CalculateDist(img, thresholded);
 
-        #ifdef TIMING
+        if(params.Timer)
+        {
             end_time = clock();
             cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
-        #endif
+        }
 
 
 
