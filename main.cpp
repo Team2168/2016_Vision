@@ -264,7 +264,7 @@ void findTarget(Mat original, Mat thresholded)
 
 
 	//Find rectangles
-	findContours(thresholded, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
+	findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
 	cout<<"Contours: "<<contours.size()<<endl;
 	cout<<"Hierarchy: "<<hierarchy.size()<<endl;
@@ -361,11 +361,13 @@ Mat ThresholdImage(Mat original)
 	inRange(original, Scalar(minB, minG, minR), Scalar(maxB, maxG, maxR), thresholded);
 
 	//smooth edges
-	//See if we can get rid of the blur operation, slows things down quite
-	// a bit and only seems to matter for targets whigh are not fully closed
 	blur(thresholded, thresholded, Size(3, 3));
 
+	//detect edges
 	Canny(thresholded, thresholded, 100, 100, 3);
+
+	//blur edges to remove noise
+	blur(thresholded, thresholded, Size(5, 5));
 
     return thresholded;
 
