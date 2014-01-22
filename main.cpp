@@ -109,20 +109,24 @@ int main(int argc, const char* argv[])
 	//Create Program Image Vairables
 	Mat img, thresholded, output;
 
+	//create windows
+    namedWindow("Original", WINDOW_AUTOSIZE);
+    namedWindow("Treshold", WINDOW_AUTOSIZE);
+
 	bool progRun = true;
 
     while(progRun)
     {
 
-            clock_t start_time, end_time = 0.0;
-            start_time = clock();
+    	clock_t start_time, end_time = 0.0;
+    	start_time = clock();
 
 
         img = GetOriginalImage(params);
-
+        imshow("Original", img);
 
         thresholded = ThresholdImage(img);
-
+        imshow("Treshold", thresholded);
 
         findTarget(img, thresholded);
 
@@ -135,20 +139,12 @@ int main(int argc, const char* argv[])
             cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
         }
 
-
-
-    #ifdef VISUAIZE
-    // Create Window
-    NamedWindow("IMAGE", WINDOW_AUTOSIZE);
-    NamedWindow("Treshold", WINDOW_AUTOSIZE);
-    #endif
-
 	//cout << "Image center = " << img.size().width/2 << endl;
 
 	#ifdef VISUALIZE
 
-	imshow("IMAGE", img);
-	imshow("Treshold", thresholded);
+
+
         //halt execution when esc key is pressed
         if(waitKey(30) >= 0)
         	progRun = 1;
