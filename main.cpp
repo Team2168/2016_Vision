@@ -299,14 +299,28 @@ void findTarget(Mat original, Mat thresholded)
 	cout<<"Hierarchy: "<<hierarchy.size()<<endl;
 
 
+	//run through all contours and remove small contours
+	unsigned int contourMin = 25;
+	for (vector<vector<Point> >::iterator it = contours.begin(); it!=contours.end(); )
+	{
+		cout<<"Contour Size: "<<it->size()<<endl;
+	    if (it->size()<contourMin)
+	        it=contours.erase(it);
+	    else
+	        ++it;
+	}
+
 	//Vector for Min Area Boxes
 	vector<RotatedRect> minRect(contours.size());
 
-
 	/// Draw contours
 	Mat drawing = Mat::zeros(original.size(), CV_8UC3 );
+
+	//run through large contours to see if they are our targerts
 	if(!contours.empty() && !hierarchy.empty())
 	{
+
+
 
 		for(unsigned int i = 0; i < contours.size(); i++)
 		{
@@ -400,13 +414,9 @@ Mat ThresholdImage(Mat original)
 	//smooth edges
 	blur(thresholded, thresholded, Size(3, 3));
 
-	//detect edges
-	Canny(thresholded, thresholded, 100, 100, 3);
-
-	//blur to remove particle noise, we use blur because it is faster. The proper method to use here is a bilateral filter
-	//because that is the only filter which will preserve edges, however due to the processing time, we opt to use
-	//blur,     //bilateralFilter ( thresholded, dest, 15, 80, 80 );
-	blur(thresholded, thresholded, Size(5, 5));
+	//Additional filtering if needed
+	//Canny(thresholded, thresholded, 100, 100, 3);
+	//blur(thresholded, thresholded, Size(5, 5));
 
 	//return image
     return thresholded;
