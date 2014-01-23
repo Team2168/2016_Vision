@@ -15,7 +15,7 @@
 #include <syslog.h>
 #include <sys/stat.h>
 #include <queue>
-#include <sys/socket.h>e
+#include <sys/socket.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -46,6 +46,28 @@ struct ProgParams
 	bool Timer;
 };
 
+struct Target
+{
+	Rect HorizontalTarget;
+	Rect VerticalTarget;
+
+	double HorizontalAngle;
+	double VerticalAngle;
+	double Horizontal_W_H_Ratio;
+	double Horizontal_H_W_Ratio;
+	double Vertical_W_H_Ratio;
+	double Vertical_H_W_Ratio;
+
+
+	Point HorizontalCenter;
+	Point VerticalCenter;
+
+	bool HorizGoal;
+	bool VertGoal;
+	bool HotGoal;
+
+};
+
 //function declarations
 //TODO: add pre- and post- comments for each function
 
@@ -71,6 +93,12 @@ int	minG = 150;
 int	maxG = 255;
 int	minB = 0;
 int	maxB = 30;
+
+//Target Ratios
+double MinHRatio = 4.6;
+double MaxHRatio = 6.3;
+double MinVRatio = 6.2;
+double MaxVRatio = 7.8;
 
 //Some common colors to draw with
 const Scalar RED    = Scalar(0,     0, 255),
@@ -133,11 +161,10 @@ int main(int argc, const char* argv[])
 
       //  CalculateDist(img, thresholded);
 
-        if(params.Timer)
-        {
+
             end_time = clock();
             cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
-        }
+
 
 	//cout << "Image center = " << img.size().width/2 << endl;
 
@@ -259,6 +286,8 @@ void findTarget(Mat original, Mat thresholded)
 {
 
 	vector<Vec4i> hierarchy;
+	Target targets;
+
 	/// Show in a window
 	namedWindow( "Contours", WINDOW_AUTOSIZE );
 
@@ -269,11 +298,6 @@ void findTarget(Mat original, Mat thresholded)
 	cout<<"Contours: "<<contours.size()<<endl;
 	cout<<"Hierarchy: "<<hierarchy.size()<<endl;
 
-
-	//Set target width to a know value.
-//	target.width = 0;
-
-//	int highestY = original.size().height;
 
 	//Vector for Min Area Boxes
 	vector<RotatedRect> minRect(contours.size());
@@ -292,18 +316,47 @@ void findTarget(Mat original, Mat thresholded)
 			//if(hierarchy[i][100] != -1)
 			drawContours( drawing, contours, i, RED, 2, 8, hierarchy, 0, Point());
 
+
 			//draw a minimum box around the target in green
 			Point2f rect_points[4];
 			minRect[i].points(rect_points);
 			for (int j = 0; j < 4; j++)
 			line(drawing,rect_points[j],rect_points[(j+1)%4],GREEN,1,8);
 
-
+			//define minAreaBox
 			Rect box;
 			box.x = minRect[i].center.x - (minRect[i].size.width/2);
 			box.y = minRect[i].center.y - (minRect[i].size.height/2);
 			box.width = minRect[i].size.width;
 			box.height = minRect[i].size.height;
+
+			double WHRatio = box.width/((double)box.height);
+			double HWRatio = ((double)box.height)/box.width;
+
+			//check if contour is vert, we use HWRatio because it is greater that 0 for vert target
+			if ((HWRatio > MinVRatio) && (HWRatio < MaxVRatio))
+			{
+				targets.VertGoal = true;
+				targets.VerticalTarget = box;
+				targets.VerticalAngle = minRect[i].angle;
+				targets.VerticalCenter = Point(box.x + box.width/2, box.y + box.height/2);
+				targets.Vertical_H_W_Ratio = HWRatio;
+				targets.Vertical_W_H_Ratio = WHRatio;
+
+			}
+			//check if contour is horiz, we use WHRatio because it is greater that 0 for vert target
+			else if ((WHRatio > MinHRatio) && (WHRatio < MaxHRatio))
+			{
+				targets.HorizGoal = true;
+				targets.HorizontalTarget = box;
+				targets.HorizontalAngle = minRect[i].angle;
+				targets.HorizontalCenter = Point(box.x + box.width/2, box.y + box.height/2);
+				targets.Horizontal_H_W_Ratio = HWRatio;
+				targets.Horizontal_W_H_Ratio = WHRatio;
+			}
+
+			if(targets.HorizGoal && targets.VertGoal)
+				targets.HotGoal = true;
 
 			cout<<"Contour: "<<i<<endl;
 			cout<<"\tX: "<<box.x<<endl;
@@ -311,43 +364,27 @@ void findTarget(Mat original, Mat thresholded)
 			cout<<"\tHeight: "<<box.height<<endl;
 			cout<<"\tWidth: "<<box.width<<endl;
 			cout<<"\tangle: "<<minRect[i].angle<<endl;
-			cout<<"\tRatio (W/H): "<<box.width/((double)box.height)<<endl;
+			cout<<"\tRatio (W/H): "<<WHRatio<<endl;
+			cout<<"\tRatio (H/W): "<<HWRatio<<endl;
+			cout<<"\tVert: "<<targets.VertGoal<<endl;
+			cout<<"\tHoriz: "<<targets.HorizGoal<<endl;
+			cout<<"\tHot Goal: "<<targets.HotGoal<<endl;
 			//rectangle(drawing,box,YELLOW);
 
 
-			boundbox = boundingRect(contours[i]);
-
-
-			//A target was found!
-			upperLeft.x = boundbox.x;
-			upperLeft.y = boundbox.y;
-			lowerRight.x = boundbox.x + target.width;
-			lowerRight.y = boundbox.y + target.height;
-
 			//ID the center in yellow
-			Point center(boundbox.x + boundbox.width/2, boundbox.y + boundbox.height/2);
-
-
+			Point center(box.x + box.width/2, box.y + box.height/2);
 			line(drawing, center, center, YELLOW, 3);
 			line(drawing ,Point(320,240),Point(320,240),YELLOW,3);
 
-
-
-//
-//			//make sure its not a tiny rectangle (noise)
-//			if((boundbox.width >= MIN_WIDTH) && (boundbox.y < highestY ))
-//			{
-//				target = boundbox;
-//			}
-
-
 		}
-			imshow( "Contours", drawing );//Make a rectangle that encompasses the target
 
 
+		imshow( "Contours", drawing );//Make a rectangle that encompasses the target
 	}
 	else
 		cout<<"No Contours"<<endl;
+
 }
 
 
@@ -366,9 +403,9 @@ Mat ThresholdImage(Mat original)
 	//detect edges
 	Canny(thresholded, thresholded, 100, 100, 3);
 
-	//blur edges to remove particle noise, we use blur because it is faster. The proper method to use here is a bilateral filter
+	//blur to remove particle noise, we use blur because it is faster. The proper method to use here is a bilateral filter
 	//because that is the only filter which will preserve edges, however due to the processing time, we opt to use
-	//blur
+	//blur,     //bilateralFilter ( thresholded, dest, 15, 80, 80 );
 	blur(thresholded, thresholded, Size(5, 5));
 
 	//return image
