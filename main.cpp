@@ -77,6 +77,7 @@ Mat GetOriginalImage(const ProgParams& params);
 double diffclock(clock_t clock1,clock_t clock2);
 Mat ThresholdImage(Mat img);
 void findTarget(Mat original, Mat thresholded);
+void NullTargets(Target& target);
 void CalculateDist(Mat& img, Mat t_img);
 
 void TCP_thread(void *obj);
@@ -96,9 +97,9 @@ int	maxB = 30;
 
 //Target Ratios
 double MinHRatio = 4.6;
-double MaxHRatio = 6.3;
+double MaxHRatio = 6.6;
 double MinVRatio = 6.2;
-double MaxVRatio = 7.8;
+double MaxVRatio = 8.5;
 
 //Some common colors to draw with
 const Scalar RED    = Scalar(0,     0, 255),
@@ -288,6 +289,7 @@ void findTarget(Mat original, Mat thresholded)
 	vector<Vec4i> hierarchy;
 	Target targets;
 
+
 	/// Show in a window
 	namedWindow( "Contours", WINDOW_AUTOSIZE );
 
@@ -316,6 +318,8 @@ void findTarget(Mat original, Mat thresholded)
 	/// Draw contours
 	Mat drawing = Mat::zeros(original.size(), CV_8UC3 );
 
+	NullTargets(targets);
+
 	//run through large contours to see if they are our targerts
 	if(!contours.empty() && !hierarchy.empty())
 	{
@@ -331,6 +335,7 @@ void findTarget(Mat original, Mat thresholded)
 			drawContours( drawing, contours, i, RED, 2, 8, hierarchy, 0, Point());
 
 
+
 			//draw a minimum box around the target in green
 			Point2f rect_points[4];
 			minRect[i].points(rect_points);
@@ -338,11 +343,18 @@ void findTarget(Mat original, Mat thresholded)
 			line(drawing,rect_points[j],rect_points[(j+1)%4],GREEN,1,8);
 
 			//define minAreaBox
-			Rect box;
-			box.x = minRect[i].center.x - (minRect[i].size.width/2);
-			box.y = minRect[i].center.y - (minRect[i].size.height/2);
-			box.width = minRect[i].size.width;
-			box.height = minRect[i].size.height;
+			Rect box = minRect[i].boundingRect();
+
+//			box.x = minRect[i].center.x - (minRect[i].size.width/2);
+//			box.y = minRect[i].center.y - (minRect[i].size.height/2);
+//			box.width = minRect[i].size.width;
+//			box.height = minRect[i].size.height;
+//			box.x = minRect[i].center.x - (minRect[i].size.width/2);
+//			box.y = minRect[i].center.y - (minRect[i].size.height/2);
+//			box.width = minRect[i].size.width;
+//			box.height = minRect[i].size.height;
+
+
 
 			double WHRatio = box.width/((double)box.height);
 			double HWRatio = ((double)box.height)/box.width;
@@ -421,6 +433,22 @@ Mat ThresholdImage(Mat original)
 	//return image
     return thresholded;
 
+}
+
+void NullTargets(Target& target)
+{
+
+	target.HorizontalAngle = 0.0;
+	target.VerticalAngle = 0.0;
+	target.Horizontal_W_H_Ratio = 0.0;
+	target.Horizontal_H_W_Ratio = 0.0;
+	target.Vertical_W_H_Ratio = 0.0;
+	target.Vertical_H_W_Ratio = 0.0;
+
+
+	target.HorizGoal = false;
+	target.VertGoal = false;
+	target.HotGoal = false;
 }
 
 void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
