@@ -76,7 +76,7 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams &params);
 Mat GetOriginalImage(const ProgParams& params);
 double diffclock(clock_t clock1,clock_t clock2);
 Mat ThresholdImage(Mat img);
-void findTarget(Mat original, Mat thresholded);
+Target findTarget(Mat original, Mat thresholded);
 void NullTargets(Target& target);
 void CalculateDist(Mat& img, Mat t_img);
 
@@ -143,6 +143,9 @@ int main(int argc, const char* argv[])
     namedWindow("Original", WINDOW_AUTOSIZE);
     namedWindow("Treshold", WINDOW_AUTOSIZE);
 
+    //store targets
+    Target targets;
+
 	bool progRun = true;
 
     while(progRun)
@@ -158,7 +161,10 @@ int main(int argc, const char* argv[])
         thresholded = ThresholdImage(img);
         imshow("Treshold", thresholded);
 
-        findTarget(img, thresholded);
+        targets = findTarget(img, thresholded);
+		cout<<"Vert: "<<targets.VertGoal<<endl;
+		cout<<"Horiz: "<<targets.HorizGoal<<endl;
+		cout<<"Hot Goal: "<<targets.HotGoal<<endl<<endl;
 
 
       //  CalculateDist(img, thresholded);
@@ -284,7 +290,7 @@ void CalculateDist(Mat& img, Mat t_img)
 }
 }
 
-void findTarget(Mat original, Mat thresholded)
+Target findTarget(Mat original, Mat thresholded)
 {
 
 	vector<Vec4i> hierarchy;
@@ -386,6 +392,7 @@ void findTarget(Mat original, Mat thresholded)
 
 
 
+
 			//ID the center in yellow
 			Point center(box.x + box.width/2, box.y + box.height/2);
 			line(drawing, center, center, YELLOW, 3);
@@ -393,15 +400,15 @@ void findTarget(Mat original, Mat thresholded)
 
 		}
 
-		cout<<"Vert: "<<targets.VertGoal<<endl;
-		cout<<"Horiz: "<<targets.HorizGoal<<endl;
-		cout<<"Hot Goal: "<<targets.HotGoal<<endl<<endl;
+
 
 
 		imshow( "Contours", drawing );//Make a rectangle that encompasses the target
 	}
 	else
 		cout<<"No Contours"<<endl;
+
+	return targets;
 
 }
 
