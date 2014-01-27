@@ -15,9 +15,6 @@
 #include <fstream>
 
 
-
-
-
 using namespace cv;
 using namespace std;
 
@@ -36,6 +33,8 @@ struct ProgParams
 	bool Timer;
 };
 
+
+//Stuct to hold information about targets found
 struct Target
 {
 	Rect HorizontalTarget;
@@ -60,8 +59,6 @@ struct Target
 
 //function declarations
 //TODO: add pre- and post- comments for each function
-
-
 void parseCommandInputs(int argc, const char* argv[], ProgParams &params);
 Mat GetOriginalImage(const ProgParams& params);
 double diffclock(clock_t clock1,clock_t clock2);
@@ -75,7 +72,7 @@ void error(const char *msg);
 
 //GLOBAL CONSTANTS
 const double PI = 3.141592653589793;
-const double HeightGroundToPivot = 38.69;
+
 
 //Thresholding parameters
 int minR = 0;
@@ -85,7 +82,7 @@ int	maxG = 255;
 int	minB = 0;
 int	maxB = 30;
 
-//Target Ratios
+//Target Ratio Ranges
 double MinHRatio = 2.8;
 double MaxHRatio = 6.6;
 
@@ -112,11 +109,7 @@ double TCPangleVal;
 double TCPdistanceVal;
 
 
-vector<char> image_data;
-vector<vector<Point> > contours;
 
-CvRect boundbox, target;
-Point upperLeft, lowerRight;
 
 
 int main(int argc, const char* argv[])
@@ -140,7 +133,6 @@ int main(int argc, const char* argv[])
 
     while(progRun)
     {
-
     	clock_t start_time, end_time = 0.0;
     	start_time = clock();
 
@@ -163,13 +155,7 @@ int main(int argc, const char* argv[])
             end_time = clock();
             cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
 
-
-	//cout << "Image center = " << img.size().width/2 << endl;
-
 	#ifdef VISUALIZE
-
-
-
         //halt execution when esc key is pressed
         if(waitKey(30) >= 0)
         	progRun = 1;
@@ -200,6 +186,7 @@ Target findTarget(Mat original, Mat thresholded)
 {
 
 	vector<Vec4i> hierarchy;
+	vector<vector<Point> > contours;
 	Target targets;
 
 
