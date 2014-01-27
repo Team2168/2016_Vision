@@ -14,19 +14,7 @@
 #include <iostream>
 #include <fstream>
 
-#include <syslog.h>
-#include <sys/stat.h>
-#include <queue>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <pthread.h>
+
 
 
 
@@ -197,8 +185,13 @@ int main(int argc, const char* argv[])
 
 double CalculateDist(Target targets)
 {
+	//vertical target is 32 inches fixed
 	double targetHeight = 32.0;
+
+	//get vertical pixels from targets
 	int height = targets.VerticalTarget.height;
+
+	//d = Tft*FOVpixel/(2*Tpixel*tanΘ)
 	return Y_IMAGE_RES * targetHeight / (height * 12 * 2 * tan(VIEW_ANGLE*PI/(180*2)));
 }
 
