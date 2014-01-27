@@ -3,6 +3,8 @@
 #define TIMING
 #define _USE_MATH_DEFINES
 #define MIN_WIDTH 120
+#define Y_IMAGE_RES 480
+#define VIEW_ANGLE 34.8665269
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,13 +80,13 @@ double diffclock(clock_t clock1,clock_t clock2);
 Mat ThresholdImage(Mat img);
 Target findTarget(Mat original, Mat thresholded);
 void NullTargets(Target& target);
-void CalculateDist(Mat& img, Mat t_img);
+double CalculateDist(Target targets);
 
 void TCP_thread(void *obj);
 void error(const char *msg);
 
 //GLOBAL CONSTANTS
-const double pi = 3.141592653589793;
+const double PI = 3.141592653589793;
 const double HeightGroundToPivot = 38.69;
 
 //Thresholding parameters
@@ -164,10 +166,10 @@ int main(int argc, const char* argv[])
         targets = findTarget(img, thresholded);
 		cout<<"Vert: "<<targets.VertGoal<<endl;
 		cout<<"Horiz: "<<targets.HorizGoal<<endl;
-		cout<<"Hot Goal: "<<targets.HotGoal<<endl<<endl;
+		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
 
 
-      //  CalculateDist(img, thresholded);
+      cout<<"Dist:" <<CalculateDist(targets)<<endl<<endl;
 
 
             end_time = clock();
@@ -193,102 +195,13 @@ int main(int argc, const char* argv[])
 
 ///////////////////FUNCTIONS/////////////////////
 
-void CalculateDist(Mat& img, Mat t_img)
+double CalculateDist(Target targets)
 {
-    if(target.width != 0) {
-		//A target was found!
-		upperLeft.x = target.x;
-		upperLeft.y = target.y;
-		lowerRight.x = upperLeft.x + target.width;
-		lowerRight.y = upperLeft.y + target.height;
-
-		//ID the center in yellow
-		Point center(target.x + target.width/2, target.y + target.height/2);
-
-		#ifdef VISUALIZE
-		line(img, center, center, YELLOW, 3);
-		line(img ,Point(320,240),Point(320,240),YELLOW,3);
-		//draw a box around the target in green
-		rectangle(img, upperLeft, lowerRight, GREEN, 2);
-		#endif
-
-		cout << "Width = " << target.width << ", Height = "
-			<< target.height << ", Center = (" << center.x
-			<< ", " << center.y << ")" << endl;
-
-		//The center point of the screen is (320,240)
-
-		//Subtract the Center X point from 320
-		Point offset(0,0);
-		offset.x = 320 - center.x;
-
-		//Subtract the Center Y point from 240
-		offset.y = 240 - center.y;
-
-		double WidthHeightRatio;
-		double twidth = target.width;
-		double theight = target.height;
-		WidthHeightRatio = twidth / theight;
-		cout << WidthHeightRatio << endl;
-		double distance;
-		double angle;
-
-		if((WidthHeightRatio >= 2.0) & (WidthHeightRatio <= 3.0)){
-			cout << "Low Target!" << endl;
-			distance = 497.8226371654 * exp(-0.0040780276 * target.width);
-			distance = distance + 12;
-			cout << "Distance (IN): " << distance << endl;
-			double PivotToCenterGoalHeight = 0;
-			PivotToCenterGoalHeight = 110.125 - HeightGroundToPivot;
-			angle = atan( PivotToCenterGoalHeight / distance );
-			angle = angle * 180 / pi;
-			cout << "Angle To Shoot At: " << angle << endl;
-		}
-
-		if((WidthHeightRatio >= 3.0) & (WidthHeightRatio <= 4.0)){
-			cout << "High Target!" << endl;
-			distance = 497.8226371654 * exp(-0.0040780276 * target.width);
-			cout << "Distance (IN): " << distance << endl;
-			double PivotToCenterGoalHeight = 0;
-			PivotToCenterGoalHeight = 99.125 - HeightGroundToPivot;
-			angle = atan( PivotToCenterGoalHeight / distance );
-			angle = angle * 180 / pi;
-			cout << "Angle To Shoot At: " << angle << endl;
-
-		}
-
-		double offsety;
-		offsety = 240 - center.y;
-
-		double offsetx;
-		offsetx = 320 - center.x;
-
-		double rotateangle;
-		rotateangle = atan(offsety / distance);
-		rotateangle = rotateangle * 180 / pi;
-		//cout << "Rotate Angle: " << rotateangle << endl;
-
-		//y=-0.0166x + 6.9019
-		double ppi_calc;
-		ppi_calc = (-1*0.0166) * offsetx + 6.9019;
-		ppi_calc = offsetx / ppi_calc;
-
-		double offsetangle;
-		offsetangle = atan(ppi_calc/distance);
-
-		offsetangle = offsetangle * 180 / pi;
-		cout << "Rotation Angle: " << offsetangle << endl;
-
-		pthread_mutex_lock(&angleTCPmutex);
-		TCPangleVal = offsetangle;
-		pthread_mutex_unlock(&angleTCPmutex);
-		pthread_mutex_lock(&distanceTCPmutex);
-		TCPdistanceVal = distance;
-		pthread_mutex_unlock(&distanceTCPmutex);
-
-		cout << endl;
+	double targetHeight = 32.0;
+	int height = targets.VerticalTarget.height;
+	return Y_IMAGE_RES * targetHeight / (height * 12 * 2 * tan(VIEW_ANGLE*PI/(180*2)));
 }
-}
+
 
 Target findTarget(Mat original, Mat thresholded)
 {
