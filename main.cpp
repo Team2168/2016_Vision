@@ -91,11 +91,11 @@ double MaxVRatio = 8.5;
 
 //Some common colors to draw with
 const Scalar RED    = Scalar(0,     0, 255),
-             GREEN  = Scalar(0,   255,   0),
-             ORANGE = Scalar(0,   128, 255),
-             YELLOW = Scalar(0,   255, 255),
-             PINK   = Scalar(255,   0, 255),
-             WHITE  = Scalar(255, 255, 255);
+		GREEN  = Scalar(0,   255,   0),
+		ORANGE = Scalar(0,   128, 255),
+		YELLOW = Scalar(0,   255, 255),
+		PINK   = Scalar(255,   0, 255),
+		WHITE  = Scalar(255, 255, 255);
 
 
 //GLOBAL VARIABLES
@@ -123,46 +123,46 @@ int main(int argc, const char* argv[])
 	Mat img, thresholded, output;
 
 	//create windows
-    namedWindow("Original", WINDOW_AUTOSIZE);
-    namedWindow("Treshold", WINDOW_AUTOSIZE);
+	namedWindow("Original", WINDOW_AUTOSIZE);
+	namedWindow("Treshold", WINDOW_AUTOSIZE);
 
-    //store targets
-    Target targets;
+	//store targets
+	Target targets;
 
 	bool progRun = true;
 
-    while(progRun)
-    {
-    	clock_t start_time, end_time = 0.0;
-    	start_time = clock();
+	while(progRun)
+	{
+		clock_t start_time, end_time = 0.0;
+		start_time = clock();
 
 
-        img = GetOriginalImage(params);
-        imshow("Original", img);
+		img = GetOriginalImage(params);
+		imshow("Original", img);
 
-        thresholded = ThresholdImage(img);
-        imshow("Treshold", thresholded);
+		thresholded = ThresholdImage(img);
+		imshow("Treshold", thresholded);
 
-        targets = findTarget(img, thresholded);
+		targets = findTarget(img, thresholded);
 		cout<<"Vert: "<<targets.VertGoal<<endl;
 		cout<<"Horiz: "<<targets.HorizGoal<<endl;
 		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
 
 
-      cout<<"Dist:" <<CalculateDist(targets)<<endl<<endl;
+		cout<<"Dist:" <<CalculateDist(targets)<<endl<<endl;
 
 
-            end_time = clock();
-            cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
+		end_time = clock();
+		cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
 
-	#ifdef VISUALIZE
-        //halt execution when esc key is pressed
-        if(waitKey(30) >= 0)
-        	progRun = 1;
-	#endif
-    }
+#ifdef VISUALIZE
+		//halt execution when esc key is pressed
+		if(waitKey(30) >= 0)
+			progRun = 1;
+#endif
+	}
 
-    return 0;
+	return 0;
 
 }
 
@@ -206,10 +206,10 @@ Target findTarget(Mat original, Mat thresholded)
 	for (vector<vector<Point> >::iterator it = contours.begin(); it!=contours.end(); )
 	{
 		cout<<"Contour Size: "<<it->size()<<endl;
-	    if (it->size()<contourMin)
-	        it=contours.erase(it);
-	    else
-	        ++it;
+		if (it->size()<contourMin)
+			it=contours.erase(it);
+		else
+			++it;
 	}
 
 	//Vector for Min Area Boxes
@@ -240,7 +240,7 @@ Target findTarget(Mat original, Mat thresholded)
 			Point2f rect_points[4];
 			minRect[i].points(rect_points);
 			for (int j = 0; j < 4; j++)
-			line(drawing,rect_points[j],rect_points[(j+1)%4],GREEN,1,8);
+				line(drawing,rect_points[j],rect_points[(j+1)%4],GREEN,1,8);
 
 			//define minAreaBox
 			Rect box = minRect[i].boundingRect();
@@ -309,10 +309,10 @@ Target findTarget(Mat original, Mat thresholded)
 
 Mat ThresholdImage(Mat original)
 {
-    //Local Temp Image
-    Mat thresholded;
+	//Local Temp Image
+	Mat thresholded;
 
-    //Threshold image to remove non-green objects
+	//Threshold image to remove non-green objects
 	inRange(original, Scalar(minB, minG, minR), Scalar(maxB, maxG, maxR), thresholded);
 
 	//smooth edges
@@ -323,7 +323,7 @@ Mat ThresholdImage(Mat original)
 	//blur(thresholded, thresholded, Size(5, 5));
 
 	//return image
-    return thresholded;
+	return thresholded;
 
 }
 
@@ -415,10 +415,10 @@ Mat GetOriginalImage(const ProgParams& params)
 	if(params.From_Camera)
 	{
 		//use wget to download the image from the camera to bone
-    	system("wget -q http://192.168.1.90/jpg/image.jpg -O capturedImage.jpg");
+		system("wget -q http://192.168.1.90/jpg/image.jpg -O capturedImage.jpg");
 
-    	//load downloaded image
-    	img = imread("capturedImage.jpg");
+		//load downloaded image
+		img = imread("capturedImage.jpg");
 
 	}
 	else if(params.From_File){
@@ -426,45 +426,45 @@ Mat GetOriginalImage(const ProgParams& params)
 		img = imread(params.IMAGE_FILE);
 	}
 
-return img;
+	return img;
 }
 
 void TCP_thread(void *obj)
 {
 
-//	char TCPbuffer[1024];
-//	int TCPbytes = 0;
-//	double angleVal = 0;
-//	double distanceVal = 0;
-//
-//
-//
-//	while(true){
-//
-//		bzero(TCPbuffer, 1024);
-//		TCPbytes = recv(sockfd, TCPbuffer, 1023, 0);
-//
-//		pthread_mutex_lock(&angleTCPmutex);
-//		angleVal = TCPangleVal;
-//		pthread_mutex_unlock(&angleTCPmutex);
-//
-//		pthread_mutex_lock(&distanceTCPmutex);
-//		distanceVal = TCPdistanceVal;
-//		pthread_mutex_unlock(&distanceTCPmutex);
-//
-//		std::ostringstream sstream;
-//		sstream << angleVal << ", " << distanceVal << "\n";
-//		std::string data_string = sstream.str();
-//			write(sockfd, data_string.data(), data_string.length());
-//
-//	}
+	//	char TCPbuffer[1024];
+	//	int TCPbytes = 0;
+	//	double angleVal = 0;
+	//	double distanceVal = 0;
+	//
+	//
+	//
+	//	while(true){
+	//
+	//		bzero(TCPbuffer, 1024);
+	//		TCPbytes = recv(sockfd, TCPbuffer, 1023, 0);
+	//
+	//		pthread_mutex_lock(&angleTCPmutex);
+	//		angleVal = TCPangleVal;
+	//		pthread_mutex_unlock(&angleTCPmutex);
+	//
+	//		pthread_mutex_lock(&distanceTCPmutex);
+	//		distanceVal = TCPdistanceVal;
+	//		pthread_mutex_unlock(&distanceTCPmutex);
+	//
+	//		std::ostringstream sstream;
+	//		sstream << angleVal << ", " << distanceVal << "\n";
+	//		std::string data_string = sstream.str();
+	//			write(sockfd, data_string.data(), data_string.length());
+	//
+	//	}
 
 }
 
 void error(const char *msg)
 {
-    perror(msg);
-    exit(0);
+	perror(msg);
+	exit(0);
 }
 
 double diffclock(clock_t clock1,clock_t clock2)
@@ -510,5 +510,5 @@ void TCP_Server()
 	    serv_addr.sin_port = htons(portno);
 	    if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0)
 	        error("ERROR connecting");
-	*/
+	 */
 }
