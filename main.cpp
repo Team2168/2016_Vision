@@ -96,9 +96,10 @@ int	minB = 0;
 int	maxB = 30;
 
 //Target Ratios
-double MinHRatio = 4.6;
+double MinHRatio = 2.8;
 double MaxHRatio = 6.6;
-double MinVRatio = 6.2;
+
+double MinVRatio = 3.2;
 double MaxVRatio = 8.5;
 
 //Some common colors to draw with
@@ -302,7 +303,7 @@ void findTarget(Mat original, Mat thresholded)
 
 
 	//run through all contours and remove small contours
-	unsigned int contourMin = 25;
+	unsigned int contourMin = 20;
 	for (vector<vector<Point> >::iterator it = contours.begin(); it!=contours.end(); )
 	{
 		cout<<"Contour Size: "<<it->size()<<endl;
@@ -345,16 +346,6 @@ void findTarget(Mat original, Mat thresholded)
 			//define minAreaBox
 			Rect box = minRect[i].boundingRect();
 
-//			box.x = minRect[i].center.x - (minRect[i].size.width/2);
-//			box.y = minRect[i].center.y - (minRect[i].size.height/2);
-//			box.width = minRect[i].size.width;
-//			box.height = minRect[i].size.height;
-//			box.x = minRect[i].center.x - (minRect[i].size.width/2);
-//			box.y = minRect[i].center.y - (minRect[i].size.height/2);
-//			box.width = minRect[i].size.width;
-//			box.height = minRect[i].size.height;
-
-
 
 			double WHRatio = box.width/((double)box.height);
 			double HWRatio = ((double)box.height)/box.width;
@@ -392,10 +383,7 @@ void findTarget(Mat original, Mat thresholded)
 			cout<<"\tangle: "<<minRect[i].angle<<endl;
 			cout<<"\tRatio (W/H): "<<WHRatio<<endl;
 			cout<<"\tRatio (H/W): "<<HWRatio<<endl;
-			cout<<"\tVert: "<<targets.VertGoal<<endl;
-			cout<<"\tHoriz: "<<targets.HorizGoal<<endl;
-			cout<<"\tHot Goal: "<<targets.HotGoal<<endl;
-			//rectangle(drawing,box,YELLOW);
+
 
 
 			//ID the center in yellow
@@ -404,6 +392,10 @@ void findTarget(Mat original, Mat thresholded)
 			line(drawing ,Point(320,240),Point(320,240),YELLOW,3);
 
 		}
+
+		cout<<"Vert: "<<targets.VertGoal<<endl;
+		cout<<"Horiz: "<<targets.HorizGoal<<endl;
+		cout<<"Hot Goal: "<<targets.HotGoal<<endl<<endl;
 
 
 		imshow( "Contours", drawing );//Make a rectangle that encompasses the target
