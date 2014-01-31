@@ -12,11 +12,15 @@
 #include <string>
 #include <ctime>
 #include <iostream>
+
+
 #include <fstream>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <netdb.h>
+
+#include "tcp_client.h"
 
 
 using namespace cv;
@@ -93,6 +97,8 @@ double MaxHRatio = 6.6;
 double MinVRatio = 3.2;
 double MaxVRatio = 8.5;
 
+int MAX_SIZE = 255;
+
 //Some common colors to draw with
 const Scalar RED    = Scalar(0,     0, 255),
 		GREEN  = Scalar(0,   255,   0),
@@ -165,6 +171,26 @@ int main(int argc, const char* argv[])
 			progRun = 1;
 #endif
 	}
+
+    tcp_client c;
+    string host;
+
+    cout<<"Enter hostname : ";
+    cin>>host;
+
+    //connect to host
+    c.conn(host , 80);
+
+    //send some data
+    c.send_data("GET / HTTP/1.1\r\n\r\n");
+
+    //receive and echo reply
+    cout<<"----------------------------\n\n";
+    cout<<c.receive(1024);
+    cout<<"\n\n----------------------------\n\n";
+
+    //done
+    return 0;
 
 	return 0;
 
@@ -433,7 +459,7 @@ Mat GetOriginalImage(const ProgParams& params)
 	return img;
 }
 
-void sendTCPPacket(String data)
+void sendTCPPacket(string data)
 {
 	
 	// Client socket descriptor which is just integer number used to access a socket
@@ -457,12 +483,11 @@ void sendTCPPacket(String data)
         bzero((char *)&serv_addr, sizeof(serv_addr));
 
 
-        server = gethostbyname("10.21.68.2");
+        server = gethostbyname("127.0.0.1");
         
         if(server == NULL)
         {       
             printf("Failed finding server name\n");
-        	return -1;
         }
 
         serv_addr.sin_family = AF_INET;
@@ -474,11 +499,17 @@ void sendTCPPacket(String data)
         if (connect(sock_descriptor, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     	{
         	printf("Failed to connect to server\n");
-            	return -1;
 	}
        	
-	//Need to change stdin to whatever is needed to send to the data
-        fgets(buff, MAX_SIZE-1, data);
+        //Need to change stdin to whatever is needed to send to the data
+
+        if( send(sock_descriptor , data.c_str() , strlen( data.c_str() ) , 0) < 0)
+        {
+            perror("Send failed : ");
+
+        }
+        cout<<"Data send\n";
+
 
         int count = write(sock_descriptor, buff, strlen(buff));
        
@@ -487,8 +518,6 @@ void sendTCPPacket(String data)
         
 
         close(sock_descriptor); 
-	return 0;
-	
 }
 
 void error(const char *msg)
