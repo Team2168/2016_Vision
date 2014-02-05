@@ -10,6 +10,7 @@
 #include<netdb.h> //hostent
 #include "tcp_client.h"
 
+
 using namespace std;
 
 
@@ -23,6 +24,7 @@ tcp_client::tcp_client()
 
 /**
     Connect to a host on a certain port number
+    Address can be host name or IP address
 */
 bool tcp_client::conn(string address , int port)
 {
@@ -111,15 +113,54 @@ bool tcp_client::send_data(string data)
 */
 string tcp_client::receive(int size=512)
 {
+
+    char current;
     char buffer[size];
     string reply;
 
-    //Receive a reply from the server
-    if( recv(sock , buffer , sizeof(buffer) , 0) < 0)
+    int i = 0;
+
+    //keep reading each byte from the stream
+    while(recv(sock , &current , 1 , 0))
     {
-        puts("recv failed");
+    		//append each byte read to the buffer
+        	buffer[i] = current;
+        	i++;
+
+        	//if we reach an end of line character, we are done for now
+        	//convert buffer to string and remove /n
+        	if (current == '\n')
+        	{
+        		reply = string(buffer, i-1);
+        		break;
+        	}
+
     }
 
-    reply = buffer;
+
     return reply;
+
+
+
+
+//    char *buffer;
+//    string reply;
+//
+//    //Receive a reply from the server
+//    while( recv(sock , buffer , 1 , 0))
+//    {
+//    	 if(*buffer == '\n') // Does this byte match terminator?
+//    	 {
+//    		*(buffer+1) = '\0'; // terminate the string.
+//
+//    		reply = buffer;
+//    		return reply; // Return bytes received
+//    	 }
+//
+//
+//    	buffer++; // Increment the pointer to the next byter.
+//    }
+//
+//    	return 0; // Didn't find the end-of-line characters.
+
 }

@@ -141,6 +141,35 @@ int main(int argc, const char* argv[])
 
 	bool progRun = true;
 
+    tcp_client c;
+    string host;
+    int port;
+
+    cout<<"Enter hostname : ";
+    cin>>host;
+
+    cout<<"Enter port : ";
+    cin>>port;
+
+    //connect to host
+    c.conn(host , port);
+
+    string getData;
+
+ while(cin>>getData)
+ {
+
+
+    //send some data
+    c.send_data(getData+"\n");
+
+    //receive and echo reply
+    cout<<"----------------------------\n\n";
+    cout<<c.receive(1024);
+    cout<<"\n\n----------------------------\n\n";
+}
+    return 0;
+
 	while(progRun)
 	{
 		clock_t start_time, end_time = 0.0;
@@ -168,31 +197,12 @@ int main(int argc, const char* argv[])
 #ifdef VISUALIZE
 		//halt execution when esc key is pressed
 		if(waitKey(30) >= 0)
-			progRun = 1;
+			progRun = 0;
 #endif
 	}
 
-    tcp_client c;
-    string host;
-
-    cout<<"Enter hostname : ";
-    cin>>host;
-
-    //connect to host
-    c.conn(host , 80);
-
-    //send some data
-    c.send_data("GET / HTTP/1.1\r\n\r\n");
-
-    //receive and echo reply
-    cout<<"----------------------------\n\n";
-    cout<<c.receive(1024);
-    cout<<"\n\n----------------------------\n\n";
-
     //done
     return 0;
-
-	return 0;
 
 }
 
