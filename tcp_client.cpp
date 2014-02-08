@@ -42,6 +42,8 @@ bool tcp_client::conn(string address , int port)
     }
     else    {   /* OK , nothing */  }
 
+    cout<<2<<endl;
+
     //setup address structure
     if(inet_addr(address.c_str()) == -1)
     {
@@ -78,15 +80,23 @@ bool tcp_client::conn(string address , int port)
         server.sin_addr.s_addr = inet_addr( address.c_str() );
     }
 
+    cout<<3<<endl;
+
     server.sin_family = AF_INET;
     server.sin_port = htons( port );
 
+    int count = 0;
+
+
     //Connect to remote server
-    if (connect(sock , (struct sockaddr *)&server , sizeof(server)) < 0)
+   while (connect(sock, (struct sockaddr *)&server, sizeof(server)) == -1)
     {
-        perror("connect failed. Error");
-        return 1;
+    	count++;
+        cout<<"Failed to Connect, retrying "<<count<<endl;
+        usleep(500000);
     }
+
+    cout<<4<<endl;
 
     cout<<"Connected\n";
     return true;
@@ -126,6 +136,7 @@ string tcp_client::receive(int size=512)
     		//append each byte read to the buffer
         	buffer[i] = current;
         	i++;
+
 
         	//if we reach an end of line character, we are done for now
         	//convert buffer to string and remove /n

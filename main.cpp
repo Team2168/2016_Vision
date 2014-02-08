@@ -20,6 +20,8 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#include <pthread.h>
+//#include <unistd.h>
 #include "tcp_client.h"
 
 
@@ -75,7 +77,10 @@ Target findTarget(Mat original, Mat thresholded);
 void NullTargets(Target& target);
 double CalculateDist(Target targets);
 
-void TCP_thread(void *obj);
+//Threaded TCP Functions
+void *TCP_thread(void *args);
+void *TCP_Send_Thread(void *args);
+void *TCP_Recv_Thread(void *args);
 void error(const char *msg);
 
 //GLOBAL CONSTANTS
@@ -112,12 +117,12 @@ const Scalar RED    = Scalar(0,     0, 255),
 int sockfd;
 pthread_mutex_t angleTCPmutex;
 pthread_mutex_t distanceTCPmutex;
-pthread_t thread;
+
 pthread_t TCPthread;
+pthread_t TCPsend;
+pthread_t TCPrecv;
 
-double TCPangleVal;
-double TCPdistanceVal;
-
+tcp_client client;
 
 
 
@@ -141,67 +146,44 @@ int main(int argc, const char* argv[])
 
 	bool progRun = true;
 
-    tcp_client c;
-    string host;
-    int port;
+	pthread_create(&TCPthread, NULL, TCP_thread, &params);
+	pthread_join(TCPthread, NULL);
+	pthread_join(TCPsend, NULL);
+	pthread_join(TCPrecv, NULL);
 
-    cout<<"Enter hostname : ";
-    cin>>host;
-
-    cout<<"Enter port : ";
-    cin>>port;
-
-    //connect to host
-    c.conn(host , port);
-
-    string getData;
-
- while(cin>>getData)
- {
-
-
-    //send some data
-    c.send_data(getData+"\n");
-
-    //receive and echo reply
-    cout<<"----------------------------\n\n";
-    cout<<c.receive(1024);
-    cout<<"\n\n----------------------------\n\n";
-}
-    return 0;
-
-	while(progRun)
-	{
-		clock_t start_time, end_time = 0.0;
-		start_time = clock();
-
-
-		img = GetOriginalImage(params);
-		imshow("Original", img);
-
-		thresholded = ThresholdImage(img);
-		imshow("Treshold", thresholded);
-
-		targets = findTarget(img, thresholded);
-		cout<<"Vert: "<<targets.VertGoal<<endl;
-		cout<<"Horiz: "<<targets.HorizGoal<<endl;
-		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
-
-
-		cout<<"Dist:" <<CalculateDist(targets)<<endl<<endl;
-
-
-		end_time = clock();
-		cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
-
-#ifdef VISUALIZE
-		//halt execution when esc key is pressed
-		if(waitKey(30) >= 0)
-			progRun = 0;
-#endif
-	}
-
-    //done
+//
+//	while(progRun)
+//	{
+//		clock_t start_time, end_time = 0.0;
+//		start_time = clock();
+//
+//
+//		img = GetOriginalImage(params);
+//		imshow("Original", img);
+//
+//		thresholded = ThresholdImage(img);
+//		imshow("Treshold", thresholded);
+//
+//		targets = findTarget(img, thresholded);
+//		cout<<"Vert: "<<targets.VertGoal<<endl;
+//		cout<<"Horiz: "<<targets.HorizGoal<<endl;
+//		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
+//
+//
+//		cout<<"Dist:" <<CalculateDist(targets)<<endl<<endl;
+//
+//
+//		end_time = clock();
+//		cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
+//
+//#ifdef VISUALIZE
+//		//halt execution when esc key is pressed
+//		if(waitKey(30) >= 0)
+//			progRun = 0;
+//#endif
+//	}
+//
+//    //done
     return 0;
 
 }
@@ -469,66 +451,6 @@ Mat GetOriginalImage(const ProgParams& params)
 	return img;
 }
 
-void sendTCPPacket(string data)
-{
-	
-	// Client socket descriptor which is just integer number used to access a socket
-        int sock_descriptor;
-        struct sockaddr_in serv_addr;
-
-        // Structure from netdb.h file used for determining host name from local host's ip address
-        struct hostent *server;
-
-        // Buffer to input data from console and write to server
-        char buff[MAX_SIZE];
-
-        // Create socket of domain - Internet (IP) address, type - Stream based (TCP) and protocol unspecified
-        // since it is only useful when underlying stack allows more than one protocol and we are choosing one.
-        // 0 means choose the default protocol.
-        sock_descriptor = socket(AF_INET, SOCK_STREAM, 0);
-
-        if(sock_descriptor < 0)
-          printf("Failed creating socket\n");
-
-        bzero((char *)&serv_addr, sizeof(serv_addr));
-
-
-        server = gethostbyname("127.0.0.1");
-        
-        if(server == NULL)
-        {       
-            printf("Failed finding server name\n");
-        }
-
-        serv_addr.sin_family = AF_INET;
-        memcpy((char *) &(serv_addr.sin_addr.s_addr), (char *)(server->h_addr), server->h_length);
-        
-        //TODO change 1234 to the port number
-        serv_addr.sin_port = htons(1234);
- 
-        if (connect(sock_descriptor, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    	{
-        	printf("Failed to connect to server\n");
-	}
-       	
-        //Need to change stdin to whatever is needed to send to the data
-
-        if( send(sock_descriptor , data.c_str() , strlen( data.c_str() ) , 0) < 0)
-        {
-            perror("Send failed : ");
-
-        }
-        cout<<"Data send\n";
-
-
-        int count = write(sock_descriptor, buff, strlen(buff));
-       
-        if(count < 0)
-        	printf("Failed writing rquested bytes to server\n");
-        
-
-        close(sock_descriptor); 
-}
 
 void error(const char *msg)
 {
@@ -543,41 +465,56 @@ double diffclock(clock_t clock1,clock_t clock2)
 	return diffms;
 }
 
-void TCP_Server()
+void *TCP_thread(void *args)
 {
-	/*
+	ProgParams *struct_ptr = (ProgParams *)args;
 
-	//	const char *message1 = "Thread 1";
-	//	pthread_t tcp_thread;
-	//	int itcp_thread;
-	//	pthread_create( &tcp_thread, NULL, TCP_thread, (void*) message1);
+	//string ip = struct_ptr->ROBOT_IP;
+	//int port = atoi(struct_ptr->ROBOT_PORT.c_str());
 
-	//	int sockfd, portno, n;
-		int portno, n;
-	    struct sockaddr_in serv_addr;
-	    struct hostent *server;
+	string ip = "10.21.68.2";
+	int port = 1111;
 
-	    char buffer[256];
-	    if (argc < 3) {
-	       fprintf(stderr,"usage %s hostname port\n", argv[0]);
-	       exit(0);
-	    }
-	    portno = atoi(argv[3]);
-	    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	    if (sockfd < 0)
-	        error("ERROR opening socket");
-	    server = gethostbyname(argv[2]);
-	    if (server == NULL) {
-	        fprintf(stderr,"ERROR, no such host\n");
-	        exit(0);
-	    }
-	    bzero((char *) &serv_addr, sizeof(serv_addr));
-	    serv_addr.sin_family = AF_INET;
-	    bcopy((char *)server->h_addr,
-	         (char *)&serv_addr.sin_addr.s_addr,
-	         server->h_length);
-	    serv_addr.sin_port = htons(portno);
-	    if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0)
-	        error("ERROR connecting");
-	 */
+    //connect to host
+    client.conn(ip , port);
+
+    string getData;
+
+    pthread_create(&TCPsend, NULL, TCP_Send_Thread, NULL);
+    pthread_create(&TCPrecv, NULL, TCP_Recv_Thread, NULL);
+
+ /* the function must return something - NULL will do */
+ return NULL;
+
+}
+
+void *TCP_Send_Thread(void *args)
+{
+	int count = 0;
+	 while(true)
+	 {
+
+
+		client.send_data("Hello From Bone \n");
+	    count++;
+	    usleep(333333); // run 3 times a second
+
+	}
+
+	return NULL;
+
+}
+
+void *TCP_Recv_Thread(void *args)
+{
+	 while(true)
+	 {
+
+	    cout<<client.receive(1024)<<endl;
+	    usleep(333333); // run 3 times a second
+
+	 }
+
+	 return NULL;
+
 }
