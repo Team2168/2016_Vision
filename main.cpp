@@ -12,13 +12,8 @@
 #include <string>
 #include <ctime>
 #include <iostream>
+#include <sstream>
 
-
-#include <fstream>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <netdb.h>
 
 #include <pthread.h>
 //#include <unistd.h>
@@ -64,6 +59,9 @@ struct Target
 	bool HorizGoal;
 	bool VertGoal;
 	bool HotGoal;
+	bool matchStart;
+
+	double targetDistance;
 
 };
 
@@ -75,7 +73,7 @@ double diffclock(clock_t clock1,clock_t clock2);
 Mat ThresholdImage(Mat img);
 Target findTarget(Mat original, Mat thresholded);
 void NullTargets(Target& target);
-double CalculateDist(Target targets);
+void CalculateDist(Target& targets);
 
 //Threaded TCP Functions
 void *TCP_thread(void *args);
@@ -114,9 +112,8 @@ const Scalar RED    = Scalar(0,     0, 255),
 
 
 //GLOBAL VARIABLES
-int sockfd;
-pthread_mutex_t angleTCPmutex;
-pthread_mutex_t distanceTCPmutex;
+pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;;
+
 
 pthread_t TCPthread;
 pthread_t TCPsend;
@@ -124,7 +121,8 @@ pthread_t TCPrecv;
 
 tcp_client client;
 
-
+//store targets
+Target targets;
 
 
 int main(int argc, const char* argv[])
@@ -141,49 +139,53 @@ int main(int argc, const char* argv[])
 	namedWindow("Original", WINDOW_AUTOSIZE);
 	namedWindow("Treshold", WINDOW_AUTOSIZE);
 
-	//store targets
-	Target targets;
-
+	targets.matchStart = false;
 	bool progRun = true;
 
+	//start TCP Server
 	pthread_create(&TCPthread, NULL, TCP_thread, &params);
+
+
+
+	while(progRun)
+	{
+		clock_t start_time, end_time = 0.0;
+		start_time = clock();
+
+
+		img = GetOriginalImage(params);
+		imshow("Original", img);
+
+		thresholded = ThresholdImage(img);
+		imshow("Treshold", thresholded);
+
+		//Lock Targets and determine goals
+		pthread_mutex_lock (&targetMutex);
+		targets = findTarget(img, thresholded);
+		CalculateDist(targets);
+
+		cout<<"Vert: "<<targets.VertGoal<<endl;
+		cout<<"Horiz: "<<targets.HorizGoal<<endl;
+		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
+		cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
+		pthread_mutex_unlock (&targetMutex);
+
+		end_time = clock();
+		cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
+
+#ifdef VISUALIZE
+		//halt execution when esc key is pressed
+		if(waitKey(30) >= 0)
+			progRun = 0;
+#endif
+	}
+
+	//if we end the camera code, wait for threads to end
 	pthread_join(TCPthread, NULL);
 	pthread_join(TCPsend, NULL);
 	pthread_join(TCPrecv, NULL);
 
-//
-//	while(progRun)
-//	{
-//		clock_t start_time, end_time = 0.0;
-//		start_time = clock();
-//
-//
-//		img = GetOriginalImage(params);
-//		imshow("Original", img);
-//
-//		thresholded = ThresholdImage(img);
-//		imshow("Treshold", thresholded);
-//
-//		targets = findTarget(img, thresholded);
-//		cout<<"Vert: "<<targets.VertGoal<<endl;
-//		cout<<"Horiz: "<<targets.HorizGoal<<endl;
-//		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
-//
-//
-//		cout<<"Dist:" <<CalculateDist(targets)<<endl<<endl;
-//
-//
-//		end_time = clock();
-//		cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
-//
-//#ifdef VISUALIZE
-//		//halt execution when esc key is pressed
-//		if(waitKey(30) >= 0)
-//			progRun = 0;
-//#endif
-//	}
-//
-//    //done
+    //done
     return 0;
 
 }
@@ -191,7 +193,7 @@ int main(int argc, const char* argv[])
 
 ///////////////////FUNCTIONS/////////////////////
 
-double CalculateDist(Target targets)
+void CalculateDist(Target& targets)
 {
 	//vertical target is 32 inches fixed
 	double targetHeight = 32.0;
@@ -200,7 +202,7 @@ double CalculateDist(Target targets)
 	int height = targets.VerticalTarget.height;
 
 	//d = Tft*FOVpixel/(2*Tpixel*tanΘ)
-	return Y_IMAGE_RES * targetHeight / (height * 12 * 2 * tan(VIEW_ANGLE*PI/(180*2)));
+	targets.targetDistance = Y_IMAGE_RES * targetHeight / (height * 12 * 2 * tan(VIEW_ANGLE*PI/(180*2)));
 }
 
 
@@ -250,7 +252,7 @@ Target findTarget(Mat original, Mat thresholded)
 
 		for(unsigned int i = 0; i < contours.size(); i++)
 		{
-			//capture corners of copntour
+			//capture corners of contour
 			minRect[i] = minAreaRect(Mat(contours[i]));
 
 			//if(hierarchy[i][100] != -1)
@@ -358,7 +360,7 @@ void NullTargets(Target& target)
 	target.Horizontal_H_W_Ratio = 0.0;
 	target.Vertical_W_H_Ratio = 0.0;
 	target.Vertical_H_W_Ratio = 0.0;
-
+	target.targetDistance = 0.0;
 
 	target.HorizGoal = false;
 	target.VertGoal = false;
@@ -478,9 +480,10 @@ void *TCP_thread(void *args)
     //connect to host
     client.conn(ip , port);
 
-    string getData;
-
+    //create thread to send messages
     pthread_create(&TCPsend, NULL, TCP_Send_Thread, NULL);
+
+    //create thread to recv messages
     pthread_create(&TCPrecv, NULL, TCP_Recv_Thread, NULL);
 
  /* the function must return something - NULL will do */
@@ -493,9 +496,17 @@ void *TCP_Send_Thread(void *args)
 	int count = 0;
 	 while(true)
 	 {
+		 //Create a string which has following information
+		 //MatchStart, HotGoal, Distance, message #
 
+		pthread_mutex_lock (&targetMutex);
+		stringstream message;
 
-		client.send_data("Hello From Bone \n");
+		message<<targets.matchStart<<","<<targets.HotGoal<<","<<targets.targetDistance<<","<<count<<"\n";
+
+		client.send_data(message.str());
+		pthread_mutex_unlock (&targetMutex);
+
 	    count++;
 	    usleep(333333); // run 3 times a second
 
@@ -509,8 +520,11 @@ void *TCP_Recv_Thread(void *args)
 {
 	 while(true)
 	 {
+			//Set Match State
+			pthread_mutex_lock (&targetMutex);
+		    cout<<client.receive(1024)<<endl;
+			pthread_mutex_unlock (&targetMutex);
 
-	    cout<<client.receive(1024)<<endl;
 	    usleep(333333); // run 3 times a second
 
 	 }

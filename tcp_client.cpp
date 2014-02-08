@@ -1,13 +1,7 @@
 /**
     C++ client example using sockets
 */
-#include<iostream>    //cout
-#include<stdio.h> //printf
-#include<string.h>    //strlen
-#include<string>  //string
-#include<sys/socket.h>    //socket
-#include<arpa/inet.h> //inet_addr
-#include<netdb.h> //hostent
+
 #include "tcp_client.h"
 
 
@@ -93,7 +87,7 @@ bool tcp_client::conn(string address , int port)
     {
     	count++;
         cout<<"Failed to Connect, retrying "<<count<<endl;
-        usleep(500000);
+        usleep(1000000); //retry to connect once a second
     }
 
     cout<<4<<endl;
@@ -113,7 +107,7 @@ bool tcp_client::send_data(string data)
         perror("Send failed : ");
         return false;
     }
-    cout<<"Data send\n";
+    cout<<"Sent: "<<data<<"\n";
 
     return true;
 }
@@ -151,27 +145,5 @@ string tcp_client::receive(int size=512)
 
     return reply;
 
-
-
-
-//    char *buffer;
-//    string reply;
-//
-//    //Receive a reply from the server
-//    while( recv(sock , buffer , 1 , 0))
-//    {
-//    	 if(*buffer == '\n') // Does this byte match terminator?
-//    	 {
-//    		*(buffer+1) = '\0'; // terminate the string.
-//
-//    		reply = buffer;
-//    		return reply; // Return bytes received
-//    	 }
-//
-//
-//    	buffer++; // Increment the pointer to the next byter.
-//    }
-//
-//    	return 0; // Didn't find the end-of-line characters.
 
 }
