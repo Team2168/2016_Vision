@@ -164,10 +164,10 @@ int main(int argc, const char* argv[])
 		targets = findTarget(img, thresholded);
 		CalculateDist(targets);
 
-//		cout<<"Vert: "<<targets.VertGoal<<endl;
-//		cout<<"Horiz: "<<targets.HorizGoal<<endl;
-//		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
-//		cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
+		//		cout<<"Vert: "<<targets.VertGoal<<endl;
+		//		cout<<"Horiz: "<<targets.HorizGoal<<endl;
+		//		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
+		//		cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
 		pthread_mutex_unlock (&targetMutex);
 
 		end_time = clock();
@@ -185,8 +185,8 @@ int main(int argc, const char* argv[])
 	pthread_join(TCPsend, NULL);
 	pthread_join(TCPrecv, NULL);
 
-    //done
-    return 0;
+	//done
+	return 0;
 
 }
 
@@ -221,15 +221,15 @@ Target findTarget(Mat original, Mat thresholded)
 	//Find rectangles
 	findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
-//	cout<<"Contours: "<<contours.size()<<endl;
-//	cout<<"Hierarchy: "<<hierarchy.size()<<endl;
+	//	cout<<"Contours: "<<contours.size()<<endl;
+	//	cout<<"Hierarchy: "<<hierarchy.size()<<endl;
 
 
 	//run through all contours and remove small contours
 	unsigned int contourMin = 20;
 	for (vector<vector<Point> >::iterator it = contours.begin(); it!=contours.end(); )
 	{
-//		cout<<"Contour Size: "<<it->size()<<endl;
+		//		cout<<"Contour Size: "<<it->size()<<endl;
 		if (it->size()<contourMin)
 			it=contours.erase(it);
 		else
@@ -298,14 +298,14 @@ Target findTarget(Mat original, Mat thresholded)
 			if(targets.HorizGoal && targets.VertGoal)
 				targets.HotGoal = true;
 
-//			cout<<"Contour: "<<i<<endl;
-//			cout<<"\tX: "<<box.x<<endl;
-//			cout<<"\tY: "<<box.y<<endl;
-//			cout<<"\tHeight: "<<box.height<<endl;
-//			cout<<"\tWidth: "<<box.width<<endl;
-//			cout<<"\tangle: "<<minRect[i].angle<<endl;
-//			cout<<"\tRatio (W/H): "<<WHRatio<<endl;
-//			cout<<"\tRatio (H/W): "<<HWRatio<<endl;
+			//			cout<<"Contour: "<<i<<endl;
+			//			cout<<"\tX: "<<box.x<<endl;
+			//			cout<<"\tY: "<<box.y<<endl;
+			//			cout<<"\tHeight: "<<box.height<<endl;
+			//			cout<<"\tWidth: "<<box.width<<endl;
+			//			cout<<"\tangle: "<<minRect[i].angle<<endl;
+			//			cout<<"\tRatio (W/H): "<<WHRatio<<endl;
+			//			cout<<"\tRatio (H/W): "<<HWRatio<<endl;
 
 
 
@@ -477,27 +477,27 @@ void *TCP_thread(void *args)
 	string ip = "10.21.68.2";
 	int port = 1111;
 
-    //connect to host
-    client.conn(ip , port);
+	//connect to host
+	client.conn(ip , port);
 
-    //create thread to send messages
-    pthread_create(&TCPsend, NULL, TCP_Send_Thread, NULL);
+	//create thread to send messages
+	pthread_create(&TCPsend, NULL, TCP_Send_Thread, NULL);
 
-    //create thread to recv messages
-    pthread_create(&TCPrecv, NULL, TCP_Recv_Thread, NULL);
+	//create thread to recv messages
+	pthread_create(&TCPrecv, NULL, TCP_Recv_Thread, NULL);
 
- /* the function must return something - NULL will do */
- return NULL;
+	/* the function must return something - NULL will do */
+	return NULL;
 
 }
 
 void *TCP_Send_Thread(void *args)
 {
 	int count = 0;
-	 while(true)
-	 {
-		 //Create a string which has following information
-		 //MatchStart, HotGoal, Distance, message #
+	while(true)
+	{
+		//Create a string which has following information
+		//MatchStart, HotGoal, Distance, message #
 
 		pthread_mutex_lock (&targetMutex);
 		stringstream message;
@@ -507,8 +507,8 @@ void *TCP_Send_Thread(void *args)
 		client.send_data(message.str());
 		pthread_mutex_unlock (&targetMutex);
 
-	    count++;
-	    usleep(333333); // run 3 times a second
+		count++;
+		usleep(333333); // run 3 times a second
 
 	}
 
@@ -518,18 +518,18 @@ void *TCP_Send_Thread(void *args)
 
 void *TCP_Recv_Thread(void *args)
 {
-	 while(true)
-	 {
-			//Set Match State, should be single int
-			pthread_mutex_lock (&targetMutex);
-		    targets.matchStart = atoi(client.receive(1024).c_str());
-		    cout<<"Received Match Start: "<<targets.matchStart<<endl;
-			pthread_mutex_unlock (&targetMutex);
+	while(true)
+	{
+		//Set Match State, should be single int
+		pthread_mutex_lock (&targetMutex);
+		targets.matchStart = atoi(client.receive(1024).c_str());
+		cout<<"Received Match Start: "<<targets.matchStart<<endl;
+		pthread_mutex_unlock (&targetMutex);
 
-	    usleep(333333); // run 3 times a second
+		usleep(333333); // run 3 times a second
 
-	 }
+	}
 
-	 return NULL;
+	return NULL;
 
 }
