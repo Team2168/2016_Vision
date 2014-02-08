@@ -164,10 +164,10 @@ int main(int argc, const char* argv[])
 		targets = findTarget(img, thresholded);
 		CalculateDist(targets);
 
-		cout<<"Vert: "<<targets.VertGoal<<endl;
-		cout<<"Horiz: "<<targets.HorizGoal<<endl;
-		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
-		cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
+//		cout<<"Vert: "<<targets.VertGoal<<endl;
+//		cout<<"Horiz: "<<targets.HorizGoal<<endl;
+//		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
+//		cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
 		pthread_mutex_unlock (&targetMutex);
 
 		end_time = clock();
@@ -221,15 +221,15 @@ Target findTarget(Mat original, Mat thresholded)
 	//Find rectangles
 	findContours(thresholded, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
-	cout<<"Contours: "<<contours.size()<<endl;
-	cout<<"Hierarchy: "<<hierarchy.size()<<endl;
+//	cout<<"Contours: "<<contours.size()<<endl;
+//	cout<<"Hierarchy: "<<hierarchy.size()<<endl;
 
 
 	//run through all contours and remove small contours
 	unsigned int contourMin = 20;
 	for (vector<vector<Point> >::iterator it = contours.begin(); it!=contours.end(); )
 	{
-		cout<<"Contour Size: "<<it->size()<<endl;
+//		cout<<"Contour Size: "<<it->size()<<endl;
 		if (it->size()<contourMin)
 			it=contours.erase(it);
 		else
@@ -298,14 +298,14 @@ Target findTarget(Mat original, Mat thresholded)
 			if(targets.HorizGoal && targets.VertGoal)
 				targets.HotGoal = true;
 
-			cout<<"Contour: "<<i<<endl;
-			cout<<"\tX: "<<box.x<<endl;
-			cout<<"\tY: "<<box.y<<endl;
-			cout<<"\tHeight: "<<box.height<<endl;
-			cout<<"\tWidth: "<<box.width<<endl;
-			cout<<"\tangle: "<<minRect[i].angle<<endl;
-			cout<<"\tRatio (W/H): "<<WHRatio<<endl;
-			cout<<"\tRatio (H/W): "<<HWRatio<<endl;
+//			cout<<"Contour: "<<i<<endl;
+//			cout<<"\tX: "<<box.x<<endl;
+//			cout<<"\tY: "<<box.y<<endl;
+//			cout<<"\tHeight: "<<box.height<<endl;
+//			cout<<"\tWidth: "<<box.width<<endl;
+//			cout<<"\tangle: "<<minRect[i].angle<<endl;
+//			cout<<"\tRatio (W/H): "<<WHRatio<<endl;
+//			cout<<"\tRatio (H/W): "<<HWRatio<<endl;
 
 
 
@@ -520,9 +520,10 @@ void *TCP_Recv_Thread(void *args)
 {
 	 while(true)
 	 {
-			//Set Match State
+			//Set Match State, should be single int
 			pthread_mutex_lock (&targetMutex);
-		    cout<<client.receive(1024)<<endl;
+		    targets.matchStart = atoi(client.receive(1024).c_str());
+		    cout<<"Received Match Start: "<<targets.matchStart<<endl;
 			pthread_mutex_unlock (&targetMutex);
 
 	    usleep(333333); // run 3 times a second
