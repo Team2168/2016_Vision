@@ -439,7 +439,7 @@ Mat GetOriginalImage(const ProgParams& params)
 	if(params.From_Camera)
 	{
 		//use wget to download the image from the camera to bone
-		system("wget -q http://192.168.1.90/jpg/image.jpg -O capturedImage.jpg");
+		system("wget -q http://10.21.68.90/jpg/image.jpg -O capturedImage.jpg");
 
 		//load downloaded image
 		img = imread("capturedImage.jpg");
