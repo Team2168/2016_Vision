@@ -71,7 +71,7 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams &params);
 Mat GetOriginalImage(const ProgParams& params);
 double diffclock(clock_t clock1,clock_t clock2);
 Mat ThresholdImage(Mat img);
-Target findTarget(Mat original, Mat thresholded);
+Target findTarget(Mat original, Mat thresholded, Target& targets);
 void NullTargets(Target& target);
 void CalculateDist(Target& targets);
 
@@ -136,8 +136,8 @@ int main(int argc, const char* argv[])
 	Mat img, thresholded, output;
 
 	//create windows
-	namedWindow("Original", WINDOW_AUTOSIZE);
-	namedWindow("Treshold", WINDOW_AUTOSIZE);
+	//namedWindow("Original", WINDOW_AUTOSIZE);
+	//namedWindow("Treshold", WINDOW_AUTOSIZE);
 
 	targets.matchStart = false;
 	bool progRun = true;
@@ -154,14 +154,14 @@ int main(int argc, const char* argv[])
 
 
 		img = GetOriginalImage(params);
-		imshow("Original", img);
+	//	imshow("Original", img);
 
 		thresholded = ThresholdImage(img);
-		imshow("Treshold", thresholded);
+	//	imshow("Treshold", thresholded);
 
 		//Lock Targets and determine goals
 		pthread_mutex_lock (&targetMutex);
-		targets = findTarget(img, thresholded);
+		findTarget(img, thresholded, targets);
 		CalculateDist(targets);
 
 		//		cout<<"Vert: "<<targets.VertGoal<<endl;
@@ -170,14 +170,18 @@ int main(int argc, const char* argv[])
 		//		cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
 		pthread_mutex_unlock (&targetMutex);
 
+		usleep(25000); // run 40 times a second
+
 		end_time = clock();
-		cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
+	//	cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
 
 #ifdef VISUALIZE
 		//halt execution when esc key is pressed
 		if(waitKey(30) >= 0)
 			progRun = 0;
 #endif
+
+
 	}
 
 	//if we end the camera code, wait for threads to end
@@ -206,16 +210,16 @@ void CalculateDist(Target& targets)
 }
 
 
-Target findTarget(Mat original, Mat thresholded)
+void findTarget(Mat original, Mat thresholded, Target& targets)
 {
 
 	vector<Vec4i> hierarchy;
 	vector<vector<Point> > contours;
-	Target targets;
+
 
 
 	/// Show in a window
-	namedWindow( "Contours", WINDOW_AUTOSIZE );
+	//namedWindow( "Contours", WINDOW_AUTOSIZE );
 
 
 	//Find rectangles
@@ -320,12 +324,11 @@ Target findTarget(Mat original, Mat thresholded)
 
 
 
-		imshow( "Contours", drawing );//Make a rectangle that encompasses the target
+		//imshow( "Contours", drawing );//Make a rectangle that encompasses the target
 	}
 	else
 		cout<<"No Contours"<<endl;
 
-	return targets;
 
 }
 
@@ -502,13 +505,14 @@ void *TCP_Send_Thread(void *args)
 		pthread_mutex_lock (&targetMutex);
 		stringstream message;
 
+
 		message<<targets.matchStart<<","<<targets.HotGoal<<","<<targets.targetDistance<<","<<count<<"\n";
 
 		client.send_data(message.str());
 		pthread_mutex_unlock (&targetMutex);
 
 		count++;
-		usleep(333333); // run 3 times a second
+		usleep(30000); // run 20 times a second
 
 	}
 
@@ -523,7 +527,6 @@ void *TCP_Recv_Thread(void *args)
 		//Set Match State, should be single int
 		pthread_mutex_lock (&targetMutex);
 		targets.matchStart = atoi(client.receive(1024).c_str());
-		cout<<"Received Match Start: "<<targets.matchStart<<endl;
 		pthread_mutex_unlock (&targetMutex);
 
 		usleep(333333); // run 3 times a second
