@@ -71,7 +71,7 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams &params);
 Mat GetOriginalImage(const ProgParams& params);
 double diffclock(clock_t clock1,clock_t clock2);
 Mat ThresholdImage(Mat img);
-Target findTarget(Mat original, Mat thresholded, Target& targets);
+void findTarget(Mat original, Mat thresholded, Target& targets);
 void NullTargets(Target& target);
 void CalculateDist(Target& targets);
 
@@ -386,28 +386,31 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 		{ /* We will iterate over argv[] to get the parameters stored inside.
 		 * Note that we're starting on 1 because we don't need to know the
 		 * path of the program, which is stored in argv[0] */
-			if (i + 1 != argc) // Check that we haven't finished parsing already
-			{
-				if (string(argv[i]) == "-f") //read from file
+
+				if ((string(argv[i]) == "-f") && (i + 1 < argc))//read from file
 				{
 					// We know the next argument *should* be the filename:
 					params.IMAGE_FILE = string(argv[i + 1]);
 					params.From_Camera=false;
 					params.From_File=true;
+					i++;
 				}
-				else if (string(argv[i]) == "-c") //camera IP
+				else if ((string(argv[i]) == "-c") && (i + 1 < argc))//camera IP
 				{
 					//params.CAMERA_IP = string(argv[i + 1]);
 					params.From_Camera=true;
 					params.From_File=false;
+					i++;
 				}
-				else if (string(argv[i]) == "-s") //robot TCP SERVER IP
+				else if ((string(argv[i]) == "-s") && (i + 1 < argc))//robot TCP SERVER IP
 				{
 					params.ROBOT_IP = string(argv[i + 1]);
+					i++;
 				}
-				else if (string(argv[i]) == "-p") //robot TCP SERVER PORT
+				else if ((string(argv[i]) == "-p") && (i + 1 < argc))//robot TCP SERVER PORT
 				{
 					params.ROBOT_PORT = string(argv[i + 1]);
+					i++;
 				}
 				else if (string(argv[i]) == "-t") //enable timing
 				{
@@ -429,7 +432,7 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 					sleep(2000);
 					exit(0);
 				}
-			}
+
 		}
 
 	}
