@@ -29,6 +29,7 @@
 								<option id="gnu.cpp.compiler.exe.debug.option.debugging.level.93654061" name="Debug Level" superClass="gnu.cpp.compiler.exe.debug.option.debugging.level" value="gnu.cpp.compiler.debugging.level.max" valueType="enumerated"/>
 								<option id="gnu.cpp.compiler.option.include.paths.1910705446" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="/home/OpenCVArm/opencv/platforms/linux/build_hardfp/install/include"/>
+									<listOptionValue builtIn="false" value="/home/CurlArm/curl/include"/>
 									<listOptionValue builtIn="false" value="/usr/arm-linux-gnueabi/include/c++/4.6.3"/>
 									<listOptionValue builtIn="false" value="/usr/local/include"/>
 								</option>
@@ -48,6 +49,7 @@
 							<tool command="arm-linux-gnueabi-g++" id="cdt.managedbuild.tool.gnu.cpp.linker.exe.debug.7256789" name="GCC C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.exe.debug">
 								<option id="gnu.cpp.link.option.paths.495281577" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="/home/OpenCVArm/opencv/platforms/linux/build_hardfp/install/lib"/>
+									<listOptionValue builtIn="false" value="/home/CurlArm/curl/lib"/>
 									<listOptionValue builtIn="false" value="/usr/arm-linux-gnueabi/lib"/>
 									<listOptionValue builtIn="false" value="/usr/local/lib"/>
 								</option>
@@ -56,6 +58,8 @@
 									<listOptionValue builtIn="false" value="opencv_core"/>
 									<listOptionValue builtIn="false" value="opencv_imgproc"/>
 									<listOptionValue builtIn="false" value="pthread"/>
+									<listOptionValue builtIn="false" value="rt"/>
+									<listOptionValue builtIn="false" value="curl"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.1107061183" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>

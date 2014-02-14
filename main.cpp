@@ -146,11 +146,12 @@ int main(int argc, const char* argv[])
 	pthread_create(&TCPthread, NULL, TCP_thread, &params);
 
 
+	struct timespec start, end;
 
 	while(progRun)
 	{
-		clock_t start_time, end_time = 0.0;
-		start_time = clock();
+
+		clock_gettime( CLOCK_REALTIME, &start );
 
 
 		img = GetOriginalImage(params);
@@ -170,10 +171,14 @@ int main(int argc, const char* argv[])
 		//		cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
 		pthread_mutex_unlock (&targetMutex);
 
+		clock_gettime( CLOCK_REALTIME, &end );
+		double difference = (end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/1000000000.0f;
+		cout << "It took " << difference << " seconds to process "<< endl;
+
+
 		usleep(25000); // run 40 times a second
 
-		end_time = clock();
-	//	cout << "Image proc. time: " << double(diffclock(end_time,start_time)) << "ms" << endl;
+
 
 #ifdef VISUALIZE
 		//halt execution when esc key is pressed
@@ -444,6 +449,7 @@ Mat GetOriginalImage(const ProgParams& params)
 
 	if(params.From_Camera)
 	{
+
 		//use wget to download the image from the camera to bone
 		system("wget -q http://10.21.68.90/jpg/image.jpg -O capturedImage.jpg");
 
