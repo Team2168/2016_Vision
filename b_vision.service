@@ -1,0 +1,11 @@
+[Unit]
+Description=Vision
+
+[Service]
+WorkingDirectory=/home/root/Vision/
+ExecStart=/bin/sh /home/root/Vision/start.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
