@@ -7,6 +7,7 @@
 #include <opencv2/opencv.hpp>
 
 using namespace cv;
+using namespace std;
 
 //curl writefunction to be passed as a parameter
 size_t write_data(char *ptr, size_t size, size_t nmemb, void *userdata) {
@@ -15,6 +16,21 @@ size_t write_data(char *ptr, size_t size, size_t nmemb, void *userdata) {
 	stream->write(ptr, count);
 	return count;
 }
+
+vector<char> image_data;
+CURL *curl_handle;
+static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
+		void *userp) {
+	size_t realsize = size * nmemb;
+	vector<char> *mem = (vector<char> *) userp;
+	size_t before_size = mem->size();
+
+	mem->resize(mem->size() + realsize);
+	memcpy(&((*mem)[before_size]), contents, realsize);
+
+	return realsize;
+}
+
 
 //function to retrieve the image as Cv::Mat data type
 cv::Mat curlImg() {
@@ -41,11 +57,32 @@ cv::Mat curlImg() {
 ////cv::namedWindow( "Image output", WINDOW_AUTOSIZE );
 //	struct timespec start, end;
 //
+//	Mat img;
+//
+//	curl_global_init(CURL_GLOBAL_ALL);
+//	curl_handle = curl_easy_init();
+//	curl_easy_setopt(curl_handle, CURLOPT_URL,
+//			"http://10.21.69.90/jpg/image.jpg");
+//	curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
+//	/* send all data to this function  */
+//	curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+//
+//
+//
 //	while (1) {
 //		clock_gettime(CLOCK_REALTIME, &start);
 //
-//		cv::Mat image = curlImg(); // get the image frame
-////cv::imshow("Image output",image); //display image frame
+//		image_data.clear();
+//		/* Put data into the image vector of char */
+//		curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA , (void *)&image_data);
+//
+//		/* get the image */
+//		curl_easy_perform(curl_handle);
+//
+//		img = imdecode(Mat(image_data), 1);
+//
+//		//cv::Mat image = curlImg(); // get the image frame
+//cv::imshow("Image output",img); //display image frame
 //
 //		char c = waitKey(20); // sleep for 33ms or till a key is pressed (put more then ur camera framerate mine is 30ms)
 //		if (c == 27)
