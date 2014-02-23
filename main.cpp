@@ -3,7 +3,7 @@
 #define TIMING
 #define _USE_MATH_DEFINES
 #define MIN_WIDTH 120
-#define Y_IMAGE_RES 480
+#define Y_IMAGE_RES 240
 #define VIEW_ANGLE 34.8665269
 
 #include <stdio.h>
@@ -15,7 +15,6 @@
 #include <sstream>
 
 #include <pthread.h>
-//#include <unistd.h>
 #include "tcp_client.h"
 
 using namespace cv;
@@ -33,6 +32,7 @@ struct ProgParams
 	bool From_File;
 	bool Visualize;
 	bool Timer;
+	bool Verbose;
 };
 
 //Stuct to hold information about targets found
@@ -78,6 +78,7 @@ void *TCP_Send_Thread(void *args);
 void *TCP_Recv_Thread(void *args);
 void error(const char *msg);
 
+//Threaded Video Capture Function
 void *VideoCap(void *args);
 
 //GLOBAL CONSTANTS
@@ -108,7 +109,7 @@ const Scalar RED = Scalar(0, 0, 255),
 			PINK = Scalar(255, 0,255),
 			WHITE = Scalar(255, 255, 255);
 
-//GLOBAL VARIABLES
+//GLOBAL MUTEX LOCK VARIABLES
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -119,12 +120,13 @@ pthread_t TCPsend;
 pthread_t TCPrecv;
 pthread_t mjpeg;
 
+//TCP Steam
 tcp_client client;
 
 //store targets
 Target targets;
 Mat frame;
-bool progRun;;
+bool progRun;
 
 int main(int argc, const char* argv[])
 {
@@ -133,10 +135,10 @@ int main(int argc, const char* argv[])
 	ProgParams params;
 	parseCommandInputs(argc, argv, params);
 
-	//mjpeg stream
+	//start mjpeg stream thread
 	pthread_create(&mjpeg, NULL, VideoCap, &params);
 
-	//Create Program Image Vairables
+	//Create Local Processing Image Vairables
 	Mat img, thresholded, output;
 
 	//create windows
@@ -153,11 +155,15 @@ int main(int argc, const char* argv[])
 
 	struct timespec start, end;
 
+	//run loop forever
 	while (true)
 	{
+		//check if program is allowed to run
+		//this bool, is enabled by the mjpeg thread
+		//once it is up to 10fps
 		if (progRun)
 		{
-
+			//start clock to determine our processing time;
 			clock_gettime(CLOCK_REALTIME, &start);
 
 //		img = GetOriginalImage(params);
@@ -169,6 +175,8 @@ int main(int argc, const char* argv[])
 				//cv::imshow("Output Window", frame);
 				frame.copyTo(img);
 				pthread_mutex_unlock(&frameMutex);
+
+
 //
 				thresholded = ThresholdImage(img);
 //			//	imshow("Treshold", thresholded);
@@ -217,6 +225,10 @@ int main(int argc, const char* argv[])
  * This function uses the law of lense projection to
  * estimate the distance to an object of known height only
  * using a single camera.
+ *
+ * This function uses only the vertical target height, the
+ * pixel height of the image, and the view angle of the
+ * camera lense.
  */
 void CalculateDist(Target& targets)
 {
@@ -339,20 +351,22 @@ void findTarget(Mat original, Mat thresholded, Target& targets)
 					targets.leftOrRightHot = -1;
 
 			}
-						cout<<"Contour: "<<i<<endl;
-						cout<<"\tX: "<<box.x<<endl;
-						cout<<"\tY: "<<box.y<<endl;
-						cout<<"\tHeight: "<<box.height<<endl;
-						cout<<"\tWidth: "<<box.width<<endl;
-						cout<<"\tangle: "<<minRect[i].angle<<endl;
-						cout<<"\tRatio (W/H): "<<WHRatio<<endl;
-						cout<<"\tRatio (H/W): "<<HWRatio<<endl;
-						cout<<"\Area: "<<box.height*box.width<<endl;
+
+
+//						cout<<"Contour: "<<i<<endl;
+//						cout<<"\tX: "<<box.x<<endl;
+//						cout<<"\tY: "<<box.y<<endl;
+//						cout<<"\tHeight: "<<box.height<<endl;
+//						cout<<"\tWidth: "<<box.width<<endl;
+//						cout<<"\tangle: "<<minRect[i].angle<<endl;
+//						cout<<"\tRatio (W/H): "<<WHRatio<<endl;
+//						cout<<"\tRatio (H/W): "<<HWRatio<<endl;
+//						cout<<"\Area: "<<box.height*box.width<<endl;
 
 			//ID the center in yellow
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
 			line(drawing, center, center, YELLOW, 3);
-			line(drawing, Point(320, 240), Point(320, 240), YELLOW, 3);
+			line(drawing, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
 
 		}
 
@@ -666,21 +680,28 @@ void *VideoCap(void *args)
 	// This works on a AXIS M1013
 	const std::string videoStreamAddress = "http://10.21.69.90/mjpg/video.mjpg";
 
+	std::cout<<"Trying to connect to Camera stream... at: "<<videoStreamAddress<<std::endl;
+
 	//open the video stream and make sure it's opened
 	if (!vcap.open(videoStreamAddress))
-		std::cout << "Error opening video stream or file" << std::endl;
+		std::cout << "Error connecting to camera stream, check IP or power" << std::endl;
 	else
 	{
 		//Stream started
-		cout << "Connected to Camera Stream" << std::endl;
+		cout << "Successfully connected to Camera Stream" << std::endl;
+
+		//end clock to determine time to setup stream
+		clock_gettime(CLOCK_REALTIME, &end);
+		double difference = (end.tv_sec - start.tv_sec)
+				+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
+		cout << "It took " << difference << " seconds to set up stream " << endl;
+
 		clock_gettime(CLOCK_REALTIME, &bufferStart);
 	}
 
-	//end clock to determine time to setup stream
-	clock_gettime(CLOCK_REALTIME, &end);
-	double difference = (end.tv_sec - start.tv_sec)
-			+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
-	cout << "It took " << difference << " seconds to set up stream " << endl;
+	cout<<"Waiting for stream buffer to clear..."<<endl;
+
+
 
 	//run in continuous loop
 	while (true)
@@ -711,7 +732,11 @@ void *VideoCap(void *args)
 		//run this loop as fast as we can and throw away all the old images. This wait, waits some number of seconds
 		//before we are at the end of the stream, and can allow processing to begin.
 		if ((bufferDifference >= waitForBufferToClear) && !progRun)
+		{
+			cout<<"Buffer Cleared: Starting Processing Thread"<<endl;
 			progRun = true;
+
+		}
 	}
 
 	return NULL;
