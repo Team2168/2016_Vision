@@ -92,7 +92,7 @@ int minB = 0;
 int maxB = 30;
 
 //Target Ratio Ranges
-double MinHRatio = 2.8;
+double MinHRatio = 2.5;
 double MaxHRatio = 6.6;
 
 double MinVRatio = 3.2;
@@ -101,15 +101,19 @@ double MaxVRatio = 8.5;
 int MAX_SIZE = 255;
 
 //Some common colors to draw with
-const Scalar RED = Scalar(0, 0, 255), GREEN = Scalar(0, 255, 0), ORANGE =
-		Scalar(0, 128, 255), YELLOW = Scalar(0, 255, 255), PINK = Scalar(255, 0,
-		255), WHITE = Scalar(255, 255, 255);
+const Scalar RED = Scalar(0, 0, 255),
+			GREEN = Scalar(0, 255, 0),
+			ORANGE = Scalar(0, 128, 255),
+			YELLOW = Scalar(0, 255, 255),
+			PINK = Scalar(255, 0,255),
+			WHITE = Scalar(255, 255, 255);
 
 //GLOBAL VARIABLES
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
-;
 
+
+//Thread Variables
 pthread_t TCPthread;
 pthread_t TCPsend;
 pthread_t TCPrecv;
@@ -167,25 +171,22 @@ int main(int argc, const char* argv[])
 				pthread_mutex_unlock(&frameMutex);
 //
 				thresholded = ThresholdImage(img);
-//		//	imshow("Treshold", thresholded);
+//			//	imshow("Treshold", thresholded);
 //
-//		//Lock Targets and determine goals
+//				//Lock Targets and determine goals
 				pthread_mutex_lock(&targetMutex);
 				findTarget(img, thresholded, targets);
 				CalculateDist(targets);
 //
-//		//		cout<<"Vert: "<<targets.VertGoal<<endl;
-//		//		cout<<"Horiz: "<<targets.HorizGoal<<endl;
-//		//		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
-//		//		cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
+				cout<<"Vert: "<<targets.VertGoal<<endl;
+				cout<<"Horiz: "<<targets.HorizGoal<<endl;
+				cout<<"Hot Goal: "<<targets.HotGoal<<endl;
+				cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
 				pthread_mutex_unlock(&targetMutex);
 
 				clock_gettime(CLOCK_REALTIME, &end);
-				double difference = (end.tv_sec - start.tv_sec)
-						+ (double) (end.tv_nsec - start.tv_nsec)
-								/ 1000000000.0f;
-				cout << "It took " << difference << " seconds to process "
-						<< endl;
+				double difference = (end.tv_sec - start.tv_sec)	+ (double) (end.tv_nsec - start.tv_nsec)/ 1000000000.0f;
+//				cout << "It took " << difference << " seconds to process "<< endl;
 			}
 //		usleep(10000); // run 40 times a second
 
@@ -252,8 +253,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets)
 	findContours(thresholded, contours, hierarchy, RETR_EXTERNAL,
 			CHAIN_APPROX_SIMPLE);
 
-	cout << "Contours: " << contours.size() << endl;
-	cout << "Hierarchy: " << hierarchy.size() << endl;
+//	cout << "Contours: " << contours.size() << endl;
+//	cout << "Hierarchy: " << hierarchy.size() << endl;
 
 	//run through all contours and remove small contours
 	unsigned int contourMin = 6;
@@ -338,15 +339,15 @@ void findTarget(Mat original, Mat thresholded, Target& targets)
 					targets.leftOrRightHot = -1;
 
 			}
-//						cout<<"Contour: "<<i<<endl;
-//						cout<<"\tX: "<<box.x<<endl;
-//						cout<<"\tY: "<<box.y<<endl;
-//						cout<<"\tHeight: "<<box.height<<endl;
-//						cout<<"\tWidth: "<<box.width<<endl;
-//						cout<<"\tangle: "<<minRect[i].angle<<endl;
-//						cout<<"\tRatio (W/H): "<<WHRatio<<endl;
-//						cout<<"\tRatio (H/W): "<<HWRatio<<endl;
-//						cout<<"\Area: "<<box.height*box.width<<endl;
+						cout<<"Contour: "<<i<<endl;
+						cout<<"\tX: "<<box.x<<endl;
+						cout<<"\tY: "<<box.y<<endl;
+						cout<<"\tHeight: "<<box.height<<endl;
+						cout<<"\tWidth: "<<box.width<<endl;
+						cout<<"\tangle: "<<minRect[i].angle<<endl;
+						cout<<"\tRatio (W/H): "<<WHRatio<<endl;
+						cout<<"\tRatio (H/W): "<<HWRatio<<endl;
+						cout<<"\Area: "<<box.height*box.width<<endl;
 
 			//ID the center in yellow
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
@@ -501,7 +502,6 @@ Mat GetOriginalImage(const ProgParams& params)
 
 	if (params.From_Camera)
 	{
-		struct timespec start, end;
 
 		system("wget -q http://10.21.69.90/jpg/image.jpg -O capturedImage.jpg");
 
@@ -698,8 +698,7 @@ void *VideoCap(void *args)
 		clock_gettime(CLOCK_REALTIME, &end);
 		double difference = (end.tv_sec - start.tv_sec)
 				+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
-		cout << "It took FFMPEG " << difference << " seconds to grab stream "
-				<< endl;
+//		cout << "It took FFMPEG " << difference << " seconds to grab stream "<< endl;
 
 		//end timer to get time since stream started
 		clock_gettime(CLOCK_REALTIME, &bufferEnd);
