@@ -104,6 +104,7 @@ int MAX_SIZE = 255;
 
 //Some common colors to draw with
 const Scalar RED = Scalar(0, 0, 255),
+			BLUE = Scalar(255, 0, 0),
 			GREEN = Scalar(0, 255, 0),
 			ORANGE = Scalar(0, 128, 255),
 			YELLOW = Scalar(0, 255, 255),
@@ -142,9 +143,6 @@ int main(int argc, const char* argv[])
 	//Create Local Processing Image Vairables
 	Mat img, thresholded, output;
 
-	//create windows
-//	namedWindow("Original", WINDOW_AUTOSIZE);
-	//namedWindow("Treshold", WINDOW_AUTOSIZE);
 
 	//initalize variables so processing loop is false;
 	targets.matchStart = false;
@@ -168,21 +166,18 @@ int main(int argc, const char* argv[])
 			clock_gettime(CLOCK_REALTIME, &start);
 
 //		img = GetOriginalImage(params);
-//			imshow("Original", img);
+
 
 			pthread_mutex_lock(&frameMutex);
 			if (!frame.empty())
 			{
-				//cv::imshow("Output Window", frame);
+
 				frame.copyTo(img);
 				pthread_mutex_unlock(&frameMutex);
 
-
-//
 				thresholded = ThresholdImage(img);
-//			//	imshow("Treshold", thresholded);
-//
-//				//Lock Targets and determine goals
+
+				//Lock Targets and determine goals
 				pthread_mutex_lock(&targetMutex);
 				findTarget(img, thresholded, targets, params);
 				CalculateDist(targets);
@@ -202,18 +197,19 @@ int main(int argc, const char* argv[])
 				if(params.Timer)
 					cout << "It took " << difference << " seconds to process frame"<< endl;
 			}
-//		usleep(10000); // run 40 times a second
 
-#ifdef VISUALIZE
-		//halt execution when esc key is pressed
-		if (waitKey(5) >= 0)
-			progRun = 0;
-#endif
+
+
+			if(params.Visualize)
+				waitKey(5);
+
+			//		usleep(10000); // run 40 times a second
+
 
 		}
 	}
 
-	//if we end the camera code, wait for threads to end
+	//if we end the process code, wait for threads to end
 	pthread_join(TCPthread, NULL);
 	pthread_join(TCPsend, NULL);
 	pthread_join(TCPrecv, NULL);
@@ -307,17 +303,18 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			//capture corners of contour
 			minRect[i] = minAreaRect(Mat(contours[i]));
 
-			//if(hierarchy[i][100] != -1)
-			drawContours(drawing, contours, i, RED, 2, 8, hierarchy, 0,
-					Point());
+			if(params.Visualize)
+			{
 
-			//draw a minimum box around the target in green
-			Point2f rect_points[4];
-			minRect[i].points(rect_points);
-			for (int j = 0; j < 4; j++)
-				line(drawing, rect_points[j], rect_points[(j + 1) % 4], GREEN,
-						1, 8);
+				//if(hierarchy[i][100] != -1)
+				//drawContours(original, contours, i, RED, 2, 8, hierarchy, 0,Point());
 
+				//draw a minimum box around the target in green
+				Point2f rect_points[4];
+				minRect[i].points(rect_points);
+				for (int j = 0; j < 4; j++)
+					line(original, rect_points[j], rect_points[(j + 1) % 4], BLUE, 1, 8);
+			}
 			//define minAreaBox
 			Rect box = minRect[i].boundingRect();
 
@@ -375,12 +372,12 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 			//ID the center in yellow
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
-			line(drawing, center, center, YELLOW, 3);
-			line(drawing, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
+			line(original, center, center, YELLOW, 3);
+			line(original, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
 
 		}
-	if(params.Visualize)
-		imshow("Contours", drawing); //Make a rectangle that encompasses the target
+		if(params.Visualize)
+			imshow("Contours", original); //Make a rectangle that encompasses the target
 	}
 	else
 	{
