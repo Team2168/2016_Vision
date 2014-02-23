@@ -22,7 +22,8 @@ using namespace cv;
 using namespace std;
 
 //struct to define program execution variables passed in from the command line
-struct ProgParams {
+struct ProgParams
+{
 	string ROBOT_IP;
 	string ROBOT_PORT;
 	string CAMERA_IP;
@@ -35,7 +36,8 @@ struct ProgParams {
 };
 
 //Stuct to hold information about targets found
-struct Target {
+struct Target
+{
 	Rect HorizontalTarget;
 	Rect VerticalTarget;
 
@@ -75,7 +77,8 @@ void *TCP_thread(void *args);
 void *TCP_Send_Thread(void *args);
 void *TCP_Recv_Thread(void *args);
 void error(const char *msg);
-void VideoCap();
+
+void *VideoCap(void *args);
 
 //GLOBAL CONSTANTS
 const double PI = 3.141592653589793;
@@ -104,24 +107,30 @@ const Scalar RED = Scalar(0, 0, 255), GREEN = Scalar(0, 255, 0), ORANGE =
 
 //GLOBAL VARIABLES
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
 ;
 
 pthread_t TCPthread;
 pthread_t TCPsend;
 pthread_t TCPrecv;
+pthread_t mjpeg;
 
 tcp_client client;
 
 //store targets
 Target targets;
+Mat frame;
+bool progRun;;
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char* argv[])
+{
 
 	//Read command line inputs to determine how the program will execute
 	ProgParams params;
 	parseCommandInputs(argc, argv, params);
 
-	//VideoCap();
+	//mjpeg stream
+	pthread_create(&mjpeg, NULL, VideoCap, &params);
 
 	//Create Program Image Vairables
 	Mat img, thresholded, output;
@@ -130,54 +139,71 @@ int main(int argc, const char* argv[]) {
 //	namedWindow("Original", WINDOW_AUTOSIZE);
 	//namedWindow("Treshold", WINDOW_AUTOSIZE);
 
+	//initalize variables so processing loop is false;
 	targets.matchStart = false;
-	bool progRun = true;
+	progRun = false;
+
 
 	//start TCP Server
-	pthread_create(&TCPthread, NULL, TCP_thread, &params);
+//	pthread_create(&TCPthread, NULL, TCP_thread, &params);
 
 	struct timespec start, end;
 
-	while (progRun) {
+	while (true)
+	{
+		if (progRun)
+		{
 
-		clock_gettime(CLOCK_REALTIME, &start);
+			clock_gettime(CLOCK_REALTIME, &start);
 
-		img = GetOriginalImage(params);
+//		img = GetOriginalImage(params);
 //			imshow("Original", img);
+
+			pthread_mutex_lock(&frameMutex);
+			if (!frame.empty())
+			{
+				//cv::imshow("Output Window", frame);
+				frame.copyTo(img);
+				pthread_mutex_unlock(&frameMutex);
 //
-		thresholded = ThresholdImage(img);
+				thresholded = ThresholdImage(img);
 //		//	imshow("Treshold", thresholded);
 //
 //		//Lock Targets and determine goals
-		pthread_mutex_lock(&targetMutex);
-		findTarget(img, thresholded, targets);
-		CalculateDist(targets);
+				pthread_mutex_lock(&targetMutex);
+				findTarget(img, thresholded, targets);
+				CalculateDist(targets);
 //
 //		//		cout<<"Vert: "<<targets.VertGoal<<endl;
 //		//		cout<<"Horiz: "<<targets.HorizGoal<<endl;
 //		//		cout<<"Hot Goal: "<<targets.HotGoal<<endl;
 //		//		cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
-		pthread_mutex_unlock(&targetMutex);
+				pthread_mutex_unlock(&targetMutex);
 
-		clock_gettime(CLOCK_REALTIME, &end);
-		double difference = (end.tv_sec - start.tv_sec)
-				+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
-		cout << "It took " << difference << " seconds to process " << endl;
-
+				clock_gettime(CLOCK_REALTIME, &end);
+				double difference = (end.tv_sec - start.tv_sec)
+						+ (double) (end.tv_nsec - start.tv_nsec)
+								/ 1000000000.0f;
+				cout << "It took " << difference << " seconds to process "
+						<< endl;
+			}
 //		usleep(10000); // run 40 times a second
 
 #ifdef VISUALIZE
 		//halt execution when esc key is pressed
-		if (waitKey(30) >= 0)
+		if (waitKey(5) >= 0)
 			progRun = 0;
 #endif
 
+		}
 	}
 
 	//if we end the camera code, wait for threads to end
 	pthread_join(TCPthread, NULL);
 	pthread_join(TCPsend, NULL);
 	pthread_join(TCPrecv, NULL);
+
+	pthread_join(mjpeg, NULL);
 
 	//done
 	return 0;
@@ -186,7 +212,8 @@ int main(int argc, const char* argv[]) {
 
 ///////////////////FUNCTIONS/////////////////////
 
-void CalculateDist(Target& targets) {
+void CalculateDist(Target& targets)
+{
 	//vertical target is 32 inches fixed
 	double targetHeight = 32.0;
 
@@ -198,30 +225,34 @@ void CalculateDist(Target& targets) {
 			/ (height * 12 * 2 * tan(VIEW_ANGLE * PI / (180 * 2)));
 }
 
-void findTarget(Mat original, Mat thresholded, Target& targets) {
+void findTarget(Mat original, Mat thresholded, Target& targets)
+{
 
 	vector<Vec4i> hierarchy;
 	vector<vector<Point> > contours;
 
 	/// Show in a window
-	namedWindow( "Contours", WINDOW_AUTOSIZE );
+	namedWindow("Contours", WINDOW_AUTOSIZE);
 
 	//Find rectangles
 	findContours(thresholded, contours, hierarchy, RETR_EXTERNAL,
 			CHAIN_APPROX_SIMPLE);
 
-	//	cout<<"Contours: "<<contours.size()<<endl;
-	//	cout<<"Hierarchy: "<<hierarchy.size()<<endl;
+	cout << "Contours: " << contours.size() << endl;
+	cout << "Hierarchy: " << hierarchy.size() << endl;
 
 	//run through all contours and remove small contours
-	unsigned int contourMin = 20;
+	unsigned int contourMin = 6;
 	for (vector<vector<Point> >::iterator it = contours.begin();
-			it != contours.end();) {
-		//		cout<<"Contour Size: "<<it->size()<<endl;
+			it != contours.end();)
+	{
+		//cout<<"Contour Size: "<<it->size()<<endl;
 		if (it->size() < contourMin)
 			it = contours.erase(it);
+
 		else
 			++it;
+
 	}
 
 	//Vector for Min Area Boxes
@@ -233,9 +264,11 @@ void findTarget(Mat original, Mat thresholded, Target& targets) {
 	NullTargets(targets);
 
 	//run through large contours to see if they are our targerts
-	if (!contours.empty() && !hierarchy.empty()) {
+	if (!contours.empty() && !hierarchy.empty())
+	{
 
-		for (unsigned int i = 0; i < contours.size(); i++) {
+		for (unsigned int i = 0; i < contours.size(); i++)
+		{
 			//capture corners of contour
 			minRect[i] = minAreaRect(Mat(contours[i]));
 
@@ -257,7 +290,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets) {
 			double HWRatio = ((double) box.height) / box.width;
 
 			//check if contour is vert, we use HWRatio because it is greater that 0 for vert target
-			if ((HWRatio > MinVRatio) && (HWRatio < MaxVRatio)) {
+			if ((HWRatio > MinVRatio) && (HWRatio < MaxVRatio))
+			{
 				targets.VertGoal = true;
 				targets.VerticalTarget = box;
 				targets.VerticalAngle = minRect[i].angle;
@@ -268,7 +302,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets) {
 
 			}
 			//check if contour is horiz, we use WHRatio because it is greater that 0 for vert target
-			else if ((WHRatio > MinHRatio) && (WHRatio < MaxHRatio)) {
+			else if ((WHRatio > MinHRatio) && (WHRatio < MaxHRatio))
+			{
 				targets.HorizGoal = true;
 				targets.HorizontalTarget = box;
 				targets.HorizontalAngle = minRect[i].angle;
@@ -283,20 +318,21 @@ void findTarget(Mat original, Mat thresholded, Target& targets) {
 				targets.HotGoal = true;
 
 				//determine left of right
-				if(targets.VerticalCenter.x < targets.HorizontalCenter.x) //target is right
+				if (targets.VerticalCenter.x < targets.HorizontalCenter.x) //target is right
 					targets.leftOrRightHot = 1;
 				else if (targets.VerticalCenter.x > targets.HorizontalCenter.x) //target is left
 					targets.leftOrRightHot = -1;
 
 			}
-			//			cout<<"Contour: "<<i<<endl;
-			//			cout<<"\tX: "<<box.x<<endl;
-			//			cout<<"\tY: "<<box.y<<endl;
-			//			cout<<"\tHeight: "<<box.height<<endl;
-			//			cout<<"\tWidth: "<<box.width<<endl;
-			//			cout<<"\tangle: "<<minRect[i].angle<<endl;
-			//			cout<<"\tRatio (W/H): "<<WHRatio<<endl;
-			//			cout<<"\tRatio (H/W): "<<HWRatio<<endl;
+//						cout<<"Contour: "<<i<<endl;
+//						cout<<"\tX: "<<box.x<<endl;
+//						cout<<"\tY: "<<box.y<<endl;
+//						cout<<"\tHeight: "<<box.height<<endl;
+//						cout<<"\tWidth: "<<box.width<<endl;
+//						cout<<"\tangle: "<<minRect[i].angle<<endl;
+//						cout<<"\tRatio (W/H): "<<WHRatio<<endl;
+//						cout<<"\tRatio (H/W): "<<HWRatio<<endl;
+//						cout<<"\Area: "<<box.height*box.width<<endl;
 
 			//ID the center in yellow
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
@@ -305,15 +341,17 @@ void findTarget(Mat original, Mat thresholded, Target& targets) {
 
 		}
 
-		imshow( "Contours", drawing );//Make a rectangle that encompasses the target
-	} else
+		imshow("Contours", drawing); //Make a rectangle that encompasses the target
+	}
+	else
 	{
 		cout << "No Contours" << endl;
 		targets.leftOrRightHot = 0;
 	}
 }
 
-Mat ThresholdImage(Mat original) {
+Mat ThresholdImage(Mat original)
+{
 	//Local Temp Image
 	Mat thresholded;
 
@@ -333,7 +371,8 @@ Mat ThresholdImage(Mat original) {
 
 }
 
-void NullTargets(Target& target) {
+void NullTargets(Target& target)
+{
 
 	target.HorizontalAngle = 0.0;
 	target.VerticalAngle = 0.0;
@@ -342,58 +381,71 @@ void NullTargets(Target& target) {
 	target.Vertical_W_H_Ratio = 0.0;
 	target.Vertical_H_W_Ratio = 0.0;
 	target.targetDistance = 0.0;
-	target.leftOrRightHot =0;
+	target.leftOrRightHot = 0;
 
 	target.HorizGoal = false;
 	target.VertGoal = false;
 	target.HotGoal = false;
 }
 
-void parseCommandInputs(int argc, const char* argv[], ProgParams& params) {
+void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
+{
 	//todo: define all input flags
-	if (argc < 2) { // Check the value of argc. If not enough parameters have been passed, inform user and exit.
+	if (argc < 2)
+	{ // Check the value of argc. If not enough parameters have been passed, inform user and exit.
 		cout << "Usage is:"; // Inform the user of how to use the program
 		cin.get();
 		exit(0);
-	} else { // if we got enough parameters...
+	}
+	else
+	{ // if we got enough parameters...
 
-		for (int i = 1; i < argc; i++) { /* We will iterate over argv[] to get the parameters stored inside.
+		for (int i = 1; i < argc; i++)
+		{ /* We will iterate over argv[] to get the parameters stored inside.
 		 * Note that we're starting on 1 because we don't need to know the
 		 * path of the program, which is stored in argv[0] */
 
 			if ((string(argv[i]) == "-f") && (i + 1 < argc)) //read from file
-					{
+			{
 				// We know the next argument *should* be the filename:
 				params.IMAGE_FILE = string(argv[i + 1]);
 				params.From_Camera = false;
 				params.From_File = true;
 				i++;
-			} else if ((string(argv[i]) == "-c") && (i + 1 < argc)) //camera IP
-					{
+			}
+			else if ((string(argv[i]) == "-c") && (i + 1 < argc)) //camera IP
+			{
 				//params.CAMERA_IP = string(argv[i + 1]);
 				params.From_Camera = true;
 				params.From_File = false;
 				i++;
-			} else if ((string(argv[i]) == "-s") && (i + 1 < argc)) //robot TCP SERVER IP
-					{
+			}
+			else if ((string(argv[i]) == "-s") && (i + 1 < argc)) //robot TCP SERVER IP
+			{
 				params.ROBOT_IP = string(argv[i + 1]);
 				i++;
-			} else if ((string(argv[i]) == "-p") && (i + 1 < argc)) //robot TCP SERVER PORT
-					{
+			}
+			else if ((string(argv[i]) == "-p") && (i + 1 < argc)) //robot TCP SERVER PORT
+			{
 				params.ROBOT_PORT = string(argv[i + 1]);
 				i++;
-			} else if (string(argv[i]) == "-t") //enable timing
-					{
+			}
+			else if (string(argv[i]) == "-t") //enable timing
+			{
 				params.Timer = true;
-			} else if (string(argv[i]) == "-d") //Default Params
-					{
+			}
+			else if (string(argv[i]) == "-d") //Default Params
+			{
 				params.ROBOT_PORT = string(argv[i + 1]);
 				return;
-			} else if (string(argv[i]) == "-help") //help
-					{
+			}
+			else if (string(argv[i]) == "-help") //help
+			{
 				//todo: cout help on commands
 				return;
-			} else {
+			}
+			else
+			{
 				std::cout
 						<< "Not enough or invalid arguments, please try again.\n";
 				sleep(2000);
@@ -405,10 +457,12 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params) {
 	}
 }
 
-Mat GetOriginalImage(const ProgParams& params) {
+Mat GetOriginalImage(const ProgParams& params)
+{
 	Mat img;
 
-	if (params.From_Camera) {
+	if (params.From_Camera)
+	{
 		struct timespec start, end;
 
 		system("wget -q http://10.21.69.90/jpg/image.jpg -O capturedImage.jpg");
@@ -416,7 +470,9 @@ Mat GetOriginalImage(const ProgParams& params) {
 		//load downloaded image
 		img = imread("capturedImage.jpg");
 
-	} else if (params.From_File) {
+	}
+	else if (params.From_File)
+	{
 		//load image from file
 		img = imread(params.IMAGE_FILE);
 	}
@@ -424,18 +480,21 @@ Mat GetOriginalImage(const ProgParams& params) {
 	return img;
 }
 
-void error(const char *msg) {
+void error(const char *msg)
+{
 	perror(msg);
 	exit(0);
 }
 
-double diffclock(clock_t clock1, clock_t clock2) {
+double diffclock(clock_t clock1, clock_t clock2)
+{
 	double diffticks = clock1 - clock2;
 	double diffms = (diffticks * 10) / CLOCKS_PER_SEC;
 	return diffms;
 }
 
-void *TCP_thread(void *args) {
+void *TCP_thread(void *args)
+{
 	ProgParams *struct_ptr = (ProgParams *) args;
 
 	//string ip = struct_ptr->ROBOT_IP;
@@ -458,17 +517,20 @@ void *TCP_thread(void *args) {
 
 }
 
-void *TCP_Send_Thread(void *args) {
+void *TCP_Send_Thread(void *args)
+{
 	int count = 0;
-	while (true) {
+	while (true)
+	{
 		//Create a string which has following information
 		//MatchStart, HotGoal, Distance, message #
 
 		pthread_mutex_lock(&targetMutex);
 		stringstream message;
 
-		message << targets.matchStart << "," << targets.HotGoal << "," << targets.leftOrRightHot << ","
-				<< targets.targetDistance << "," << count << "\n";
+		message << targets.matchStart << "," << targets.HotGoal << ","
+				<< targets.leftOrRightHot << "," << targets.targetDistance
+				<< "," << count << "\n";
 
 		client.send_data(message.str());
 		pthread_mutex_unlock(&targetMutex);
@@ -482,8 +544,10 @@ void *TCP_Send_Thread(void *args) {
 
 }
 
-void *TCP_Recv_Thread(void *args) {
-	while (true) {
+void *TCP_Recv_Thread(void *args)
+{
+	while (true)
+	{
 		//Set Match State, should be single int
 		pthread_mutex_lock(&targetMutex);
 		targets.matchStart = atoi(client.receive(1024).c_str());
@@ -497,59 +561,83 @@ void *TCP_Recv_Thread(void *args) {
 
 }
 
-void VideoCap() {
-	struct timespec start, end;
-			clock_gettime( CLOCK_REALTIME, &start );
+/**
+ * This function uses FFMPEG codec apart of openCV to open a
+ * MJPEG stream and buffer it. This function should be ran
+ * in its own thread so it can run as fast as possibe and store frames.
+ *
+ * A mutable lock should be used in another thread to copy the latest frame
+ *
+ * Note: Opening the stream blocks execution. Also
+ * Based on my own tests it appears the beaglebone can capture
+ * frames at 30fps with 320 x 240 resolution, however
+ * the framerate needs to be reduced to allow for processing time.
+ *
+ * Only run the camera as 10FPS, with a 10kbs limit per frame
+ */
+void *VideoCap(void *args)
+{
+	//create timer variables
+	struct timespec start, end, bufferStart, bufferEnd;
 
+	int waitForBufferToClear = 5;
 
+	//start timer to time how long it takes to open stream
+	clock_gettime(CLOCK_REALTIME, &start);
 
 	cv::VideoCapture vcap;
 	cv::Mat image;
 
-	// This works on a D-Link CDS-932L
-	const std::string videoStreamAddress =
-			"http://10.21.69.90/mjpg/video.mjpg";
+	// This works on a AXIS M1013
+	const std::string videoStreamAddress = "http://10.21.69.90/mjpg/video.mjpg";
 
 	//open the video stream and make sure it's opened
-	if (!vcap.open(videoStreamAddress)) {
+	if (!vcap.open(videoStreamAddress))
 		std::cout << "Error opening video stream or file" << std::endl;
-
-	}
 	else
+	{
+		//Stream started
 		std::cout << "connected" << std::endl;
+		clock_gettime(CLOCK_REALTIME, &bufferStart);
+	}
 
-	clock_gettime( CLOCK_REALTIME, &end );
-	double difference = (end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/1000000000.0f;
-	cout << "It took " << difference << " seconds to set up stream "<< endl;
+	//end clock to determine time to setup stream
+	clock_gettime(CLOCK_REALTIME, &end);
+	double difference = (end.tv_sec - start.tv_sec)
+			+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
+	cout << "It took " << difference << " seconds to set up stream " << endl;
 
-    vcap.set(CAP_PROP_FRAME_WIDTH,320);
-    vcap.set(CAP_PROP_FRAME_HEIGHT,240);
+	//run in continuous loop
+	for (;;)
+	{
 
+		//start timer to get time per frame
+		clock_gettime(CLOCK_REALTIME, &start);
 
+		//read frame and store it in global variable
+		pthread_mutex_lock(&frameMutex);
+		vcap.read(frame);
+		pthread_mutex_unlock(&frameMutex);
 
-	for (;;) {
-		clock_gettime( CLOCK_REALTIME, &start );
+		//end timer to get time per frame
+		clock_gettime(CLOCK_REALTIME, &end);
+		double difference = (end.tv_sec - start.tv_sec)
+				+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
+		cout << "It took FFMPEG " << difference << " seconds to grab stream "
+				<< endl;
 
-		cout<<vcap.get(CAP_PROP_POS_FRAMES)<<" , "<<vcap.get(CAP_PROP_FRAME_COUNT)<<endl;
+		//end timer to get time since stream started
+		clock_gettime(CLOCK_REALTIME, &bufferEnd);
+		double bufferDifference = (bufferEnd.tv_sec - bufferStart.tv_sec)
+				+ (double) (bufferEnd.tv_nsec - bufferStart.tv_nsec)
+						/ 1000000000.0f;
 
-		vcap.set(CAP_PROP_POS_FRAMES, -1); //start the video at 300ms
-
-		vcap.read(image);
-
-
-
-
-		cv::imshow("Output Window", image);
-		if (cv::waitKey(1) >= 0)
-			break;
-
-
-
-		clock_gettime( CLOCK_REALTIME, &end );
-				double difference = (end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/1000000000.0f;
-			//	cout << "It took " << difference << " seconds to grap frame "<< endl;
-
-
+		//The stream takes a while to start up, and because of it, images from the camera
+		//buffer. We don't have a way to jump to the end of the stream to get the latest image, so we
+		//run this loop as fast as we can and throw away all the old images. This wait, waits some number of seconds
+		//before we are at the end of the stream, and can allow processing to begin.
+		if ((bufferDifference >= waitForBufferToClear) && !progRun)
+			progRun = true;
 	}
 }
 
