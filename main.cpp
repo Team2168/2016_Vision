@@ -115,7 +115,6 @@ const Scalar RED = Scalar(0, 0, 255),
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
 
-
 //Thread Variables
 pthread_t TCPthread;
 pthread_t TCPsend;
@@ -125,9 +124,11 @@ pthread_t mjpeg;
 //TCP Steam
 tcp_client client;
 
-//store targets
+//Store targets in global variable
 Target targets;
 Mat frame;
+
+//Control process thread exectution
 bool progRun;
 
 int main(int argc, const char* argv[])
@@ -140,11 +141,11 @@ int main(int argc, const char* argv[])
 	//start mjpeg stream thread
 	pthread_create(&mjpeg, NULL, VideoCap, &params);
 
-	//Create Local Processing Image Vairables
+	//Create Local Processing Image Variables
 	Mat img, thresholded, output;
 
 
-	//initalize variables so processing loop is false;
+	//initialize variables so processing loop is false;
 	targets.matchStart = false;
 	progRun = false;
 
@@ -164,9 +165,6 @@ int main(int argc, const char* argv[])
 		{
 			//start clock to determine our processing time;
 			clock_gettime(CLOCK_REALTIME, &start);
-
-//		img = GetOriginalImage(params);
-
 
 			pthread_mutex_lock(&frameMutex);
 			if (!frame.empty())
@@ -535,6 +533,9 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
  * program struct.
  *
  * The image returned is then used for processing.
+ *
+ * THIS FUNCTION IS OBSOLTETE AND HAS BEEN REPLACED
+ * BY AN FFMPEG STREAM FUNCTION
  */
 Mat GetOriginalImage(const ProgParams& params)
 {
@@ -695,79 +696,100 @@ void *VideoCap(void *args)
 	//copy passed in variable to programStruct
 	ProgParams *struct_ptr = (ProgParams *) args;
 
-	//create timer variables
-	struct timespec start, end, bufferStart, bufferEnd;
-
-	//seconds to wait for buffer to clear before we start main process thread
-	int waitForBufferToClear = 5;
-
-	//start timer to time how long it takes to open stream
-	clock_gettime(CLOCK_REALTIME, &start);
-
-	cv::VideoCapture vcap;
-
-	// This works on a AXIS M1013
-	const std::string videoStreamAddress = "http://10.21.69.90/mjpg/video.mjpg";
-
-	std::cout<<"Trying to connect to Camera stream... at: "<<videoStreamAddress<<std::endl;
-
-	//open the video stream and make sure it's opened
-	if (!vcap.open(videoStreamAddress))
-		std::cout << "Error connecting to camera stream, check IP or power" << std::endl;
-	else
+	if (struct_ptr->From_File)
 	{
-		//Stream started
-		cout << "Successfully connected to Camera Stream" << std::endl;
+		cout<<"Loading Image from file"<<endl;
 
-		//end clock to determine time to setup stream
-		clock_gettime(CLOCK_REALTIME, &end);
-		double difference = (end.tv_sec - start.tv_sec)
-				+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
-		cout << "It took " << difference << " seconds to set up stream " << endl;
-
-		clock_gettime(CLOCK_REALTIME, &bufferStart);
-	}
-
-	cout<<"Waiting for stream buffer to clear..."<<endl;
-
-
-
-	//run in continuous loop
-	while (true)
-	{
-
-		//start timer to get time per frame
-		clock_gettime(CLOCK_REALTIME, &start);
-
-		//read frame and store it in global variable
+		//read img and store it in global variable
 		pthread_mutex_lock(&frameMutex);
-		vcap.read(frame);
+		frame = imread(struct_ptr->IMAGE_FILE);
 		pthread_mutex_unlock(&frameMutex);
 
-		//end timer to get time per frame
-		clock_gettime(CLOCK_REALTIME, &end);
-		double difference = (end.tv_sec - start.tv_sec)
-				+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
+		cout<<"File Loaded: Starting Processing Thread"<<endl;
+		progRun = true;
 
-		if(struct_ptr->Timer)
-			cout << "It took FFMPEG " << difference << " seconds to grab stream "<< endl;
 
-		//end timer to get time since stream started
-		clock_gettime(CLOCK_REALTIME, &bufferEnd);
-		double bufferDifference = (bufferEnd.tv_sec - bufferStart.tv_sec)
-				+ (double) (bufferEnd.tv_nsec - bufferStart.tv_nsec)
+	}
+
+	else if(struct_ptr->From_Camera)
+	{
+		//create timer variables
+		struct timespec start, end, bufferStart, bufferEnd;
+
+		//seconds to wait for buffer to clear before we start main process thread
+		int waitForBufferToClear = 5;
+
+		//start timer to time how long it takes to open stream
+		clock_gettime(CLOCK_REALTIME, &start);
+
+		cv::VideoCapture vcap;
+
+		// This works on a AXIS M1013
+		const std::string videoStreamAddress = "http://10.21.69.90/mjpg/video.mjpg";
+
+		std::cout<<"Trying to connect to Camera stream... at: "<<videoStreamAddress<<std::endl;
+
+		//open the video stream and make sure it's opened
+		if (!vcap.open(videoStreamAddress))
+			std::cout << "Error connecting to camera stream, check IP or power" << std::endl;
+		else
+		{
+			//Stream started
+			cout << "Successfully connected to Camera Stream" << std::endl;
+
+			//end clock to determine time to setup stream
+			clock_gettime(CLOCK_REALTIME, &end);
+			double difference = (end.tv_sec - start.tv_sec)
+						+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
+			cout << "It took " << difference << " seconds to set up stream " << endl;
+
+			clock_gettime(CLOCK_REALTIME, &bufferStart);
+		}
+
+		cout<<"Waiting for stream buffer to clear..."<<endl;
+
+
+
+		//run in continuous loop
+		while (true)
+		{
+
+			//start timer to get time per frame
+			clock_gettime(CLOCK_REALTIME, &start);
+
+			//read frame and store it in global variable
+			pthread_mutex_lock(&frameMutex);
+			vcap.read(frame);
+			pthread_mutex_unlock(&frameMutex);
+
+			//end timer to get time per frame
+			clock_gettime(CLOCK_REALTIME, &end);
+			double difference = (end.tv_sec - start.tv_sec)
+						+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
+
+			if(struct_ptr->Timer)
+				cout << "It took FFMPEG " << difference << " seconds to grab stream "<< endl;
+
+			//end timer to get time since stream started
+			clock_gettime(CLOCK_REALTIME, &bufferEnd);
+			double bufferDifference = (bufferEnd.tv_sec - bufferStart.tv_sec)
+						+ (double) (bufferEnd.tv_nsec - bufferStart.tv_nsec)
 						/ 1000000000.0f;
 
-		//The stream takes a while to start up, and because of it, images from the camera
-		//buffer. We don't have a way to jump to the end of the stream to get the latest image, so we
-		//run this loop as fast as we can and throw away all the old images. This wait, waits some number of seconds
-		//before we are at the end of the stream, and can allow processing to begin.
-		if ((bufferDifference >= waitForBufferToClear) && !progRun)
-		{
-			cout<<"Buffer Cleared: Starting Processing Thread"<<endl;
-			progRun = true;
+			//The stream takes a while to start up, and because of it, images from the camera
+			//buffer. We don't have a way to jump to the end of the stream to get the latest image, so we
+			//run this loop as fast as we can and throw away all the old images. This wait, waits some number of seconds
+			//before we are at the end of the stream, and can allow processing to begin.
+			if ((bufferDifference >= waitForBufferToClear) && !progRun)
+			{
+				cout<<"Buffer Cleared: Starting Processing Thread"<<endl;
+				progRun = true;
 
+			}
+
+			//		usleep(10000); // run 40 times a second
 		}
+
 	}
 
 	return NULL;
