@@ -150,7 +150,7 @@ int main(int argc, const char* argv[])
 
 
 	//start TCP Server
-//	pthread_create(&TCPthread, NULL, TCP_thread, &params);
+	pthread_create(&TCPthread, NULL, TCP_thread, &params);
 
 	struct timespec start, end;
 
@@ -638,7 +638,7 @@ void *TCP_Send_Thread(void *args)
 		pthread_mutex_unlock(&targetMutex);
 
 		count++;
-		usleep(30000); //  run ~33 times a second
+		usleep(60000); //  run ~16 times a second
 
 	}
 
