@@ -32,7 +32,7 @@ struct ProgParams
 	bool From_File;
 	bool Visualize;
 	bool Timer;
-	bool Verbose;
+	bool Debug;
 };
 
 //Stuct to hold information about targets found
@@ -66,9 +66,10 @@ struct Target
 //TODO: add pre- and post- comments for each function
 void parseCommandInputs(int argc, const char* argv[], ProgParams &params);
 Mat GetOriginalImage(const ProgParams& params);
+void initializeParams(ProgParams& params);
 double diffclock(clock_t clock1, clock_t clock2);
 Mat ThresholdImage(Mat img);
-void findTarget(Mat original, Mat thresholded, Target& targets);
+void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams& params);
 void NullTargets(Target& target);
 void CalculateDist(Target& targets);
 
@@ -183,18 +184,23 @@ int main(int argc, const char* argv[])
 //
 //				//Lock Targets and determine goals
 				pthread_mutex_lock(&targetMutex);
-				findTarget(img, thresholded, targets);
+				findTarget(img, thresholded, targets, params);
 				CalculateDist(targets);
-//
-				cout<<"Vert: "<<targets.VertGoal<<endl;
-				cout<<"Horiz: "<<targets.HorizGoal<<endl;
-				cout<<"Hot Goal: "<<targets.HotGoal<<endl;
-				cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
+
+				if(params.Debug)
+				{
+					cout<<"Vert: "<<targets.VertGoal<<endl;
+					cout<<"Horiz: "<<targets.HorizGoal<<endl;
+					cout<<"Hot Goal: "<<targets.HotGoal<<endl;
+					cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
+				}
 				pthread_mutex_unlock(&targetMutex);
 
 				clock_gettime(CLOCK_REALTIME, &end);
 				double difference = (end.tv_sec - start.tv_sec)	+ (double) (end.tv_nsec - start.tv_nsec)/ 1000000000.0f;
-//				cout << "It took " << difference << " seconds to process "<< endl;
+
+				if(params.Timer)
+					cout << "It took " << difference << " seconds to process frame"<< endl;
 			}
 //		usleep(10000); // run 40 times a second
 
@@ -252,21 +258,23 @@ void CalculateDist(Target& targets)
  * and is identified as a horizontal and vertical target
  * in the same frame, with known width and height.
  */
-void findTarget(Mat original, Mat thresholded, Target& targets)
+void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams& params)
 {
 
 	vector<Vec4i> hierarchy;
 	vector<vector<Point> > contours;
 
-	/// Show in a window
-	namedWindow("Contours", WINDOW_AUTOSIZE);
+
 
 	//Find rectangles
 	findContours(thresholded, contours, hierarchy, RETR_EXTERNAL,
 			CHAIN_APPROX_SIMPLE);
 
-//	cout << "Contours: " << contours.size() << endl;
-//	cout << "Hierarchy: " << hierarchy.size() << endl;
+	if(params.Debug)
+	{
+	cout << "Contours: " << contours.size() << endl;
+	cout << "Hierarchy: " << hierarchy.size() << endl;
+	}
 
 	//run through all contours and remove small contours
 	unsigned int contourMin = 6;
@@ -352,16 +360,18 @@ void findTarget(Mat original, Mat thresholded, Target& targets)
 
 			}
 
-
-//						cout<<"Contour: "<<i<<endl;
-//						cout<<"\tX: "<<box.x<<endl;
-//						cout<<"\tY: "<<box.y<<endl;
-//						cout<<"\tHeight: "<<box.height<<endl;
-//						cout<<"\tWidth: "<<box.width<<endl;
-//						cout<<"\tangle: "<<minRect[i].angle<<endl;
-//						cout<<"\tRatio (W/H): "<<WHRatio<<endl;
-//						cout<<"\tRatio (H/W): "<<HWRatio<<endl;
-//						cout<<"\Area: "<<box.height*box.width<<endl;
+			if(params.Debug)
+			{
+				cout<<"Contour: "<<i<<endl;
+				cout<<"\tX: "<<box.x<<endl;
+				cout<<"\tY: "<<box.y<<endl;
+				cout<<"\tHeight: "<<box.height<<endl;
+				cout<<"\tWidth: "<<box.width<<endl;
+				cout<<"\tangle: "<<minRect[i].angle<<endl;
+				cout<<"\tRatio (W/H): "<<WHRatio<<endl;
+				cout<<"\tRatio (H/W): "<<HWRatio<<endl;
+				cout<<"\tArea: "<<box.height*box.width<<endl;
+			}
 
 			//ID the center in yellow
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
@@ -369,7 +379,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets)
 			line(drawing, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
 
 		}
-
+	if(params.Visualize)
 		imshow("Contours", drawing); //Make a rectangle that encompasses the target
 	}
 	else
@@ -427,6 +437,15 @@ void NullTargets(Target& target)
 	target.VertGoal = false;
 	target.HotGoal = false;
 }
+void initializeParams(ProgParams& params)
+{
+	params.Debug = false;
+	params.From_Camera = false;
+	params.From_File = false;
+	params.Timer = false;
+	params.Visualize = false;
+
+}
 
 /**
  * This function parses the command line inputs and determines
@@ -444,6 +463,8 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 	}
 	else
 	{ // if we got enough parameters...
+
+		initializeParams(params);
 
 		for (int i = 1; i < argc; i++)
 		{ /* We will iterate over argv[] to get the parameters stored inside.
@@ -475,9 +496,17 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 				params.ROBOT_PORT = string(argv[i + 1]);
 				i++;
 			}
-			else if (string(argv[i]) == "-t") //enable timing
+			else if (string(argv[i]) == "-t") //Enable Timing
 			{
 				params.Timer = true;
+			}
+			else if (string(argv[i]) == "-v") //Enable Verbose output
+			{
+				params.Visualize = true;
+			}
+			else if (string(argv[i]) == "-debug") //Enable debug output
+			{
+				params.Debug = true;
 			}
 			else if (string(argv[i]) == "-d") //Default Params
 			{
@@ -666,6 +695,9 @@ void *TCP_Recv_Thread(void *args)
  */
 void *VideoCap(void *args)
 {
+	//copy passed in variable to programStruct
+	ProgParams *struct_ptr = (ProgParams *) args;
+
 	//create timer variables
 	struct timespec start, end, bufferStart, bufferEnd;
 
@@ -719,7 +751,9 @@ void *VideoCap(void *args)
 		clock_gettime(CLOCK_REALTIME, &end);
 		double difference = (end.tv_sec - start.tv_sec)
 				+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
-//		cout << "It took FFMPEG " << difference << " seconds to grab stream "<< endl;
+
+		if(struct_ptr->Timer)
+			cout << "It took FFMPEG " << difference << " seconds to grab stream "<< endl;
 
 		//end timer to get time since stream started
 		clock_gettime(CLOCK_REALTIME, &bufferEnd);
