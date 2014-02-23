@@ -212,6 +212,11 @@ int main(int argc, const char* argv[])
 
 ///////////////////FUNCTIONS/////////////////////
 
+/**
+ * This function uses the law of lense projection to
+ * estimate the distance to an object of known height only
+ * using a single camera.
+ */
 void CalculateDist(Target& targets)
 {
 	//vertical target is 32 inches fixed
@@ -225,6 +230,15 @@ void CalculateDist(Target& targets)
 			/ (height * 12 * 2 * tan(VIEW_ANGLE * PI / (180 * 2)));
 }
 
+/**
+ * This function scans through an image and determins
+ * if rectangles exist which match the profile of a
+ * "Hot Goal".
+ *
+ * The "Hot Goal" is specific to the 2014 FRC game
+ * and is identified as a horizontal and vertical target
+ * in the same frame, with known width and height.
+ */
 void findTarget(Mat original, Mat thresholded, Target& targets)
 {
 
@@ -350,6 +364,12 @@ void findTarget(Mat original, Mat thresholded, Target& targets)
 	}
 }
 
+/**
+ * This function performs numerous filtering on
+ * a color image in order to only return
+ * areas of interest based on their color
+ *
+ */
 Mat ThresholdImage(Mat original)
 {
 	//Local Temp Image
@@ -371,6 +391,11 @@ Mat ThresholdImage(Mat original)
 
 }
 
+/**
+ * This functions "zeros", the targets identified
+ * so that a clean slate can be used to determine
+ * if the next image contains targets as well.
+ */
 void NullTargets(Target& target)
 {
 
@@ -388,6 +413,11 @@ void NullTargets(Target& target)
 	target.HotGoal = false;
 }
 
+/**
+ * This function parses the command line inputs and determines
+ * the runtime parameters the program should use as specified
+ * by the user.
+ */
 void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 {
 	//todo: define all input flags
@@ -456,7 +486,15 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 
 	}
 }
-
+/**
+ * This function either gets an image from the camera
+ * loads from a file
+ *
+ * The condition is determined by variables within the
+ * program struct.
+ *
+ * The image returned is then used for processing.
+ */
 Mat GetOriginalImage(const ProgParams& params)
 {
 	Mat img;
@@ -493,6 +531,16 @@ double diffclock(clock_t clock1, clock_t clock2)
 	return diffms;
 }
 
+/**
+ * This function creates a TCP stream between the cRIO and the
+ * beaglebone.
+ *
+ * Once the stream is established it will automatically
+ * create two new threads, one to send a predetermined message
+ * to the cRIO, and another to receive a predetermined message
+ * from the cRIO.
+ */
+
 void *TCP_thread(void *args)
 {
 	ProgParams *struct_ptr = (ProgParams *) args;
@@ -517,6 +565,18 @@ void *TCP_thread(void *args)
 
 }
 
+/**
+ * This function sends data to the cRIO over TCP.
+ *
+ * This function assumes the TCP stream has already been created.
+ *
+ * Currently the only data we receive from the CRIO is match start
+ * boolean which allows us to detrmine the time autonomous starts.
+ *
+ * This function should be ran it its own thread. It uses a sleep
+ * function to pause execution.
+ */
+
 void *TCP_Send_Thread(void *args)
 {
 	int count = 0;
@@ -528,21 +588,36 @@ void *TCP_Send_Thread(void *args)
 		pthread_mutex_lock(&targetMutex);
 		stringstream message;
 
+		//create string stream message;
 		message << targets.matchStart << "," << targets.HotGoal << ","
 				<< targets.leftOrRightHot << "," << targets.targetDistance
 				<< "," << count << "\n";
 
+		//send message over pipe
 		client.send_data(message.str());
 		pthread_mutex_unlock(&targetMutex);
 
 		count++;
-		usleep(30000); // run 20 times a second
+		usleep(30000); //  run ~33 times a second
 
 	}
 
 	return NULL;
 
 }
+
+/**
+ * This function captures data from the cRIO over TCP and saves it in a
+ * variable.
+ *
+ * This function assumes the TCP stream has already been created.
+ *
+ * Currently the only data we receive from the CRIO is match start
+ * boolean which allows us to determine the time autonomous starts.
+ *
+ * This function should be ran it its own thread. It uses a sleep
+ * function to pause execution.
+ */
 
 void *TCP_Recv_Thread(void *args)
 {
@@ -580,13 +655,13 @@ void *VideoCap(void *args)
 	//create timer variables
 	struct timespec start, end, bufferStart, bufferEnd;
 
+	//seconds to wait for buffer to clear before we start main process thread
 	int waitForBufferToClear = 5;
 
 	//start timer to time how long it takes to open stream
 	clock_gettime(CLOCK_REALTIME, &start);
 
 	cv::VideoCapture vcap;
-	cv::Mat image;
 
 	// This works on a AXIS M1013
 	const std::string videoStreamAddress = "http://10.21.69.90/mjpg/video.mjpg";
@@ -597,7 +672,7 @@ void *VideoCap(void *args)
 	else
 	{
 		//Stream started
-		std::cout << "connected" << std::endl;
+		cout << "Connected to Camera Stream" << std::endl;
 		clock_gettime(CLOCK_REALTIME, &bufferStart);
 	}
 
@@ -608,7 +683,7 @@ void *VideoCap(void *args)
 	cout << "It took " << difference << " seconds to set up stream " << endl;
 
 	//run in continuous loop
-	for (;;)
+	while (true)
 	{
 
 		//start timer to get time per frame
@@ -639,5 +714,7 @@ void *VideoCap(void *args)
 		if ((bufferDifference >= waitForBufferToClear) && !progRun)
 			progRun = true;
 	}
+
+	return NULL;
 }
 
