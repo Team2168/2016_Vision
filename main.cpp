@@ -58,7 +58,9 @@ struct Target
 	//camera bool
 	bool cameraConnected;
 
-	int leftOrRightHot;
+	int targetLeftOrRight;
+	int lastTargerLorR;
+	int hotLeftOrRight;
 	double targetDistance;
 
 };
@@ -159,6 +161,7 @@ int main(int argc, const char* argv[])
 	//initialize variables so processing loop is false;
 	targets.matchStart = false;
 	targets.validFrame = false;
+	targets.hotLeftOrRight = 0;
 	progRun = false;
 
 
@@ -358,11 +361,13 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			{
 				targets.HotGoal = true;
 
-				//determine left of right
+				//determine left or right
 				if (targets.VerticalCenter.x < targets.HorizontalCenter.x) //target is right
-					targets.leftOrRightHot = 1;
+					targets.targetLeftOrRight = 1;
 				else if (targets.VerticalCenter.x > targets.HorizontalCenter.x) //target is left
-					targets.leftOrRightHot = -1;
+					targets.targetLeftOrRight = -1;
+
+				targets.lastTargerLorR = targets.targetLeftOrRight;
 
 			}
 
@@ -391,8 +396,14 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	else
 	{
 		cout << "No Contours" << endl;
-		targets.leftOrRightHot = 0;
+		targets.targetLeftOrRight = 0;
 	}
+
+	pthread_mutex_lock(&matchStartMutex);
+	if (!targets.matchStart)
+		targets.hotLeftOrRight = targets.targetLeftOrRight;
+	pthread_mutex_unlock(&matchStartMutex);
+
 }
 
 /**
@@ -437,7 +448,8 @@ void NullTargets(Target& target)
 	target.Vertical_W_H_Ratio = 0.0;
 	target.Vertical_H_W_Ratio = 0.0;
 	target.targetDistance = 0.0;
-	target.leftOrRightHot = 0;
+	target.targetLeftOrRight = 0;
+	target.lastTargerLorR = 0;
 
 	target.HorizGoal = false;
 	target.VertGoal = false;
@@ -642,7 +654,7 @@ void *TCP_Send_Thread(void *args)
 
 		//create string stream message;
 		message << targets.matchStart << ","<< targets.validFrame << "," << targets.HotGoal << ","
-				<< targets.leftOrRightHot << "," << targets.targetDistance
+				<< targets.hotLeftOrRight << "," << targets.targetDistance
 				<< "," << count << "\n";
 
 		//send message over pipe
@@ -857,12 +869,21 @@ void *HotGoalCounter(void *args)
 	{
 		clock_gettime(CLOCK_REALTIME, &autoEnd);
 		double timeNow = diffClock(autoStart,autoEnd);
-		if(timeNow>5 && timeNow<10)
+		if(timeNow<5)
+		{
+			pthread_mutex_lock(&targetMutex);
+			if(targets.targetLeftOrRight == 0)
+				targets.hotLeftOrRight = targets.lastTargerLorR * -1;
+			else
+				targets.hotLeftOrRight = targets.targetLeftOrRight;
+			pthread_mutex_unlock(&targetMutex);
+		}
+		else if(timeNow<10)
 		{
 			//Auto has been running for 5 seconds, so the other side is hot
 			//we update the variable to switch to other side
 			pthread_mutex_lock(&targetMutex);
-			targets.leftOrRightHot = targets.leftOrRightHot * -1;
+			targets.hotLeftOrRight = targets.hotLeftOrRight * -1;
 			pthread_mutex_unlock(&targetMutex);
 
 			cout<<"otherside hot"<<endl;
@@ -870,7 +891,9 @@ void *HotGoalCounter(void *args)
 		else if (timeNow >= 10)
 		{
 			//Auto is over, no more hot targets, end thread
-			targets.leftOrRightHot = 0;
+			pthread_mutex_lock(&targetMutex);
+			targets.hotLeftOrRight = 0;
+			pthread_mutex_unlock(&targetMutex);
 			cout<<"auto over"<<endl;
 			break;
 		}
