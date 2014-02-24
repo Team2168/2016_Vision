@@ -2,6 +2,7 @@
 #define MIN_WIDTH 120
 #define Y_IMAGE_RES 240
 #define VIEW_ANGLE 34.8665269
+#define AUTO_STEADY_STATE 0.150 //seconds
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,9 +53,12 @@ struct Target
 	bool VertGoal;
 	bool HotGoal;
 	bool matchStart;
+	bool validFrame;
+
+	//camera bool
+	bool cameraConnected;
 
 	int leftOrRightHot;
-
 	double targetDistance;
 
 };
@@ -113,7 +117,9 @@ const Scalar RED = Scalar(0, 0, 255),
 
 //GLOBAL MUTEX LOCK VARIABLES
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t matchStartMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 //Thread Variables
 pthread_t TCPthread;
@@ -152,6 +158,7 @@ int main(int argc, const char* argv[])
 
 	//initialize variables so processing loop is false;
 	targets.matchStart = false;
+	targets.validFrame = false;
 	progRun = false;
 
 
@@ -205,7 +212,7 @@ int main(int argc, const char* argv[])
 			if(params.Visualize)
 				waitKey(5);
 
-		//	usleep(10000); // run 40 times a second
+			usleep(20000); //sleep for 5ms); // run 40 times a second
 
 
 		}
@@ -435,6 +442,7 @@ void NullTargets(Target& target)
 	target.HorizGoal = false;
 	target.VertGoal = false;
 	target.HotGoal = false;
+
 }
 void initializeParams(ProgParams& params)
 {
@@ -629,19 +637,21 @@ void *TCP_Send_Thread(void *args)
 		//MatchStart, HotGoal, Distance, message #
 
 		pthread_mutex_lock(&targetMutex);
+		pthread_mutex_lock(&matchStartMutex);
 		stringstream message;
 
 		//create string stream message;
-		message << targets.matchStart << "," << targets.HotGoal << ","
+		message << targets.matchStart << ","<< targets.validFrame << "," << targets.HotGoal << ","
 				<< targets.leftOrRightHot << "," << targets.targetDistance
 				<< "," << count << "\n";
 
 		//send message over pipe
 		client.send_data(message.str());
+		pthread_mutex_unlock(&matchStartMutex);
 		pthread_mutex_unlock(&targetMutex);
 
 		count++;
-		usleep(60000); //  run ~16 times a second
+		usleep(50000); //  run ~20 times a second
 
 	}
 
@@ -652,6 +662,16 @@ void *TCP_Send_Thread(void *args)
 /**
  * This function captures data from the cRIO over TCP and saves it in a
  * variable.
+ *
+ * NOTE: THIS FUNCTION BLOCKS WAITING FOR DATA ON THE PIPE TO BE
+ * RECEIVED. IF YOU PASS IT A MUTABLE LOCK, IT WILL BLOCK ON
+ * THAT LOCK UNTIL A /n CHARACTER IS RECEIVED. POSSIBLY BLOCKING
+ * ANY OTHER THREAD USING THAT LOCK.
+ *
+ * YOU CAN AVOID THIS BY MAKING SURE THE CRIO PASSES DATA TO THE BONE
+ * FASTER OR AS FAST AS THIS FUNCTION LOOPS.
+ *
+ * ALSO BE CAREFUL WHAT MUTABLE LOCKS ARE USED.
  *
  * This function assumes the TCP stream has already been created.
  *
@@ -664,26 +684,48 @@ void *TCP_Send_Thread(void *args)
 
 void *TCP_Recv_Thread(void *args)
 {
-	int count =0;
+	int count1 = 0;
+	int count2 = 0;
+	struct timespec end;
 
 	while (true)
 	{
 		//Set Match State, should be single int
-		pthread_mutex_lock(&targetMutex);
-		targets.matchStart = atoi(client.receive(1024).c_str());
+//		pthread_mutex_lock(&matchStartMutex);
+		targets.matchStart = atoi(client.receive(5).c_str());
 
-		//once the match starts, we start a counter run it in
-		//a new thread, we use count so we only run this once
-		if(targets.matchStart && count==0)
+		if(!targets.matchStart)
 		{
-			clock_gettime(CLOCK_REALTIME, &autoEnd);
-			count++;
+			count1=0;
+			count2=0;
+			targets.validFrame = false;
+
+		}
+
+		//once the match starts, we start a timer and run it in
+		//a new thread, we use a count variable so we only run this once
+		if(targets.matchStart && count1==0)
+		{
+			clock_gettime(CLOCK_REALTIME, &autoStart);
+			count1++;
 			pthread_create(&AutoCounter, NULL, HotGoalCounter, args);
 		}
 
-		pthread_mutex_unlock(&targetMutex);
 
-		usleep(333333); // run 3 times a second
+		clock_gettime(CLOCK_REALTIME, &end);
+
+		//Only set validFrame after we wait a certain amount of time, and after
+		//process thread starts
+		if(targets.matchStart && diffClock(autoStart,end)>=0.150 && progRun && count2==0 )
+		{
+			targets.validFrame = true;
+			count2++;
+		}
+
+
+//		pthread_mutex_unlock(&matchStartMutex);
+
+		usleep(200000); // run 5 times a second
 
 	}
 
@@ -731,7 +773,7 @@ void *VideoCap(void *args)
 		struct timespec start, end, bufferStart, bufferEnd;
 
 		//seconds to wait for buffer to clear before we start main process thread
-		int waitForBufferToClear = 5;
+		int waitForBufferToClear = 7;
 
 		//start timer to time how long it takes to open stream
 		clock_gettime(CLOCK_REALTIME, &start);
@@ -797,7 +839,7 @@ void *VideoCap(void *args)
 
 			}
 
-			//		usleep(10000); //sleep for 10ms
+					usleep(20000); //sleep for 5ms
 		}
 
 	}
@@ -808,19 +850,32 @@ void *VideoCap(void *args)
 void *HotGoalCounter(void *args)
 {
 
-	//If we started, then the match started
+	//If this method started, then the match started
 
 
 	while (true)
 	{
-		//Set Match State, should be single int
-		pthread_mutex_lock(&targetMutex);
-		targets.matchStart = atoi(client.receive(1024).c_str());
+		clock_gettime(CLOCK_REALTIME, &autoEnd);
+		double timeNow = diffClock(autoStart,autoEnd);
+		if(timeNow>5 && timeNow<10)
+		{
+			//Auto has been running for 5 seconds, so the other side is hot
+			//we update the variable to switch to other side
+			pthread_mutex_lock(&targetMutex);
+			targets.leftOrRightHot = targets.leftOrRightHot * -1;
+			pthread_mutex_unlock(&targetMutex);
 
+			cout<<"otherside hot"<<endl;
+		}
+		else if (timeNow >= 10)
+		{
+			//Auto is over, no more hot targets, end thread
+			targets.leftOrRightHot = 0;
+			cout<<"auto over"<<endl;
+			break;
+		}
 
-		pthread_mutex_unlock(&targetMutex);
-
-		usleep(333333); // run 3 times a second
+		usleep(50000); // run 10 times a second
 
 	}
 
