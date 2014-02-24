@@ -1,6 +1,3 @@
-#define FROM_FILE
-#define VISUALIZE
-#define TIMING
 #define _USE_MATH_DEFINES
 #define MIN_WIDTH 120
 #define Y_IMAGE_RES 240
@@ -67,7 +64,7 @@ struct Target
 void parseCommandInputs(int argc, const char* argv[], ProgParams &params);
 Mat GetOriginalImage(const ProgParams& params);
 void initializeParams(ProgParams& params);
-double diffclock(clock_t clock1, clock_t clock2);
+double diffClock(timespec start, timespec end);
 Mat ThresholdImage(Mat img);
 void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams& params);
 void NullTargets(Target& target);
@@ -81,6 +78,9 @@ void error(const char *msg);
 
 //Threaded Video Capture Function
 void *VideoCap(void *args);
+
+//Threaded Counter Function
+void *HotGoalCounter(void *args);
 
 //GLOBAL CONSTANTS
 const double PI = 3.141592653589793;
@@ -119,7 +119,8 @@ pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_t TCPthread;
 pthread_t TCPsend;
 pthread_t TCPrecv;
-pthread_t mjpeg;
+pthread_t MJPEG;
+pthread_t AutoCounter;
 
 //TCP Steam
 tcp_client client;
@@ -127,6 +128,10 @@ tcp_client client;
 //Store targets in global variable
 Target targets;
 Mat frame;
+
+//Global Timestamps for auto
+struct timespec autoStart, autoEnd;
+
 
 //Control process thread exectution
 bool progRun;
@@ -139,7 +144,7 @@ int main(int argc, const char* argv[])
 	parseCommandInputs(argc, argv, params);
 
 	//start mjpeg stream thread
-	pthread_create(&mjpeg, NULL, VideoCap, &params);
+	pthread_create(&MJPEG, NULL, VideoCap, &params);
 
 	//Create Local Processing Image Variables
 	Mat img, thresholded, output;
@@ -190,10 +195,9 @@ int main(int argc, const char* argv[])
 				pthread_mutex_unlock(&targetMutex);
 
 				clock_gettime(CLOCK_REALTIME, &end);
-				double difference = (end.tv_sec - start.tv_sec)	+ (double) (end.tv_nsec - start.tv_nsec)/ 1000000000.0f;
 
 				if(params.Timer)
-					cout << "It took " << difference << " seconds to process frame"<< endl;
+					cout << "It took " << diffClock(start,end) << " seconds to process frame"<< endl;
 			}
 
 
@@ -201,7 +205,7 @@ int main(int argc, const char* argv[])
 			if(params.Visualize)
 				waitKey(5);
 
-			//		usleep(10000); // run 40 times a second
+		//	usleep(10000); // run 40 times a second
 
 
 		}
@@ -212,7 +216,7 @@ int main(int argc, const char* argv[])
 	pthread_join(TCPsend, NULL);
 	pthread_join(TCPrecv, NULL);
 
-	pthread_join(mjpeg, NULL);
+	pthread_join(MJPEG, NULL);
 
 	//done
 	return 0;
@@ -565,11 +569,9 @@ void error(const char *msg)
 	exit(0);
 }
 
-double diffclock(clock_t clock1, clock_t clock2)
+double diffClock(timespec start, timespec end)
 {
-	double diffticks = clock1 - clock2;
-	double diffms = (diffticks * 10) / CLOCKS_PER_SEC;
-	return diffms;
+ return	(end.tv_sec - start.tv_sec) + (double) (end.tv_nsec - start.tv_nsec)/ 1000000000.0f;
 }
 
 /**
@@ -662,11 +664,23 @@ void *TCP_Send_Thread(void *args)
 
 void *TCP_Recv_Thread(void *args)
 {
+	int count =0;
+
 	while (true)
 	{
 		//Set Match State, should be single int
 		pthread_mutex_lock(&targetMutex);
 		targets.matchStart = atoi(client.receive(1024).c_str());
+
+		//once the match starts, we start a counter run it in
+		//a new thread, we use count so we only run this once
+		if(targets.matchStart && count==0)
+		{
+			clock_gettime(CLOCK_REALTIME, &autoEnd);
+			count++;
+			pthread_create(&AutoCounter, NULL, HotGoalCounter, args);
+		}
+
 		pthread_mutex_unlock(&targetMutex);
 
 		usleep(333333); // run 3 times a second
@@ -739,9 +753,8 @@ void *VideoCap(void *args)
 
 			//end clock to determine time to setup stream
 			clock_gettime(CLOCK_REALTIME, &end);
-			double difference = (end.tv_sec - start.tv_sec)
-						+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
-			cout << "It took " << difference << " seconds to set up stream " << endl;
+
+			cout << "It took " << diffClock(start,end) << " seconds to set up stream " << endl;
 
 			clock_gettime(CLOCK_REALTIME, &bufferStart);
 		}
@@ -764,17 +777,14 @@ void *VideoCap(void *args)
 
 			//end timer to get time per frame
 			clock_gettime(CLOCK_REALTIME, &end);
-			double difference = (end.tv_sec - start.tv_sec)
-						+ (double) (end.tv_nsec - start.tv_nsec) / 1000000000.0f;
+
 
 			if(struct_ptr->Timer)
-				cout << "It took FFMPEG " << difference << " seconds to grab stream "<< endl;
+				cout << "It took FFMPEG " << diffClock(start,end) << " seconds to grab stream "<< endl;
 
 			//end timer to get time since stream started
 			clock_gettime(CLOCK_REALTIME, &bufferEnd);
-			double bufferDifference = (bufferEnd.tv_sec - bufferStart.tv_sec)
-						+ (double) (bufferEnd.tv_nsec - bufferStart.tv_nsec)
-						/ 1000000000.0f;
+			double bufferDifference = diffClock(bufferStart, bufferEnd);
 
 			//The stream takes a while to start up, and because of it, images from the camera
 			//buffer. We don't have a way to jump to the end of the stream to get the latest image, so we
@@ -787,11 +797,34 @@ void *VideoCap(void *args)
 
 			}
 
-			//		usleep(10000); // run 40 times a second
+			//		usleep(10000); //sleep for 10ms
 		}
 
 	}
 
 	return NULL;
+}
+
+void *HotGoalCounter(void *args)
+{
+
+	//If we started, then the match started
+
+
+	while (true)
+	{
+		//Set Match State, should be single int
+		pthread_mutex_lock(&targetMutex);
+		targets.matchStart = atoi(client.receive(1024).c_str());
+
+
+		pthread_mutex_unlock(&targetMutex);
+
+		usleep(333333); // run 3 times a second
+
+	}
+
+	return NULL;
+
 }
 
