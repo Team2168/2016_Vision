@@ -657,8 +657,8 @@ void *TCP_Send_Thread(void *args)
 
 		//create string stream message;
 		message << targets.matchStart << ","<< targets.validFrame << "," << targets.HotGoal << ","
-				<< targets.hotLeftOrRight << "," << targets.targetDistance
-				<< "," << count << "\n";
+				<< targets.cameraConnected << "," << progRun << ","<< targets.hotLeftOrRight << ","
+				<< targets.targetDistance << "," << count << "\n";
 
 		//send message over pipe
 		client.send_data(message.str());
@@ -813,6 +813,11 @@ void *VideoCap(void *args)
 			//Stream started
 			cout << "Successfully connected to Camera Stream" << std::endl;
 
+			//set true boolean
+			pthread_mutex_lock(&targetMutex);
+			targets.cameraConnected = true;
+			pthread_mutex_unlock(&targetMutex);
+
 			//end clock to determine time to setup stream
 			clock_gettime(CLOCK_REALTIME, &end);
 
@@ -832,10 +837,10 @@ void *VideoCap(void *args)
 			//start timer to get time per frame
 			clock_gettime(CLOCK_REALTIME, &start);
 
-				//read frame and store it in global variable
-				pthread_mutex_lock(&frameMutex);
-				vcap.read(frame);
-				pthread_mutex_unlock(&frameMutex);
+			//read frame and store it in global variable
+			pthread_mutex_lock(&frameMutex);
+			vcap.read(frame);
+			pthread_mutex_unlock(&frameMutex);
 
 			//end timer to get time per frame
 			clock_gettime(CLOCK_REALTIME, &end);
