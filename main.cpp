@@ -103,7 +103,7 @@ int maxB = 30;
 double MinHRatio = 2.5;
 double MaxHRatio = 6.6;
 
-double MinVRatio = 3.2;
+double MinVRatio = 2.5;
 double MaxVRatio = 8.5;
 
 int MAX_SIZE = 255;
@@ -390,14 +390,17 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			line(original, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
 
 		}
-		if(params.Visualize)
-			imshow("Contours", original); //Make a rectangle that encompasses the target
+		//if(params.Visualize)
+			//imshow("Contours", original); //Make a rectangle that encompasses the target
 	}
 	else
 	{
 		cout << "No Contours" << endl;
 		targets.targetLeftOrRight = 0;
 	}
+
+	if(params.Visualize)
+				imshow("Contours", original); //Make a rectangle that encompasses the target
 
 	pthread_mutex_lock(&matchStartMutex);
 	if (!targets.matchStart)
@@ -568,7 +571,7 @@ Mat GetOriginalImage(const ProgParams& params)
 	if (params.From_Camera)
 	{
 
-		system("wget -q http://10.21.69.90/jpg/image.jpg -O capturedImage.jpg");
+		system("wget -q http://10.21.68.90/jpg/image.jpg -O capturedImage.jpg");
 
 		//load downloaded image
 		img = imread("capturedImage.jpg");
@@ -611,7 +614,7 @@ void *TCP_thread(void *args)
 	//string ip = struct_ptr->ROBOT_IP;
 	//int port = atoi(struct_ptr->ROBOT_PORT.c_str());
 
-	string ip = "10.21.69.2";
+	string ip = "10.21.68.2";
 	int port = 1111;
 
 	//connect to host
@@ -785,7 +788,7 @@ void *VideoCap(void *args)
 		struct timespec start, end, bufferStart, bufferEnd;
 
 		//seconds to wait for buffer to clear before we start main process thread
-		int waitForBufferToClear = 7;
+		int waitForBufferToClear = 15;
 
 		//start timer to time how long it takes to open stream
 		clock_gettime(CLOCK_REALTIME, &start);
@@ -793,15 +796,20 @@ void *VideoCap(void *args)
 		cv::VideoCapture vcap;
 
 		// This works on a AXIS M1013
-		const std::string videoStreamAddress = "http://10.21.69.90/mjpg/video.mjpg";
+		const std::string videoStreamAddress = "http://10.21.68.90/mjpg/video.mjpg";
 
 		std::cout<<"Trying to connect to Camera stream... at: "<<videoStreamAddress<<std::endl;
 
+		int count = 1;
+
 		//open the video stream and make sure it's opened
-		if (!vcap.open(videoStreamAddress))
-			std::cout << "Error connecting to camera stream, check IP or power" << std::endl;
-		else
+		while (!vcap.open(videoStreamAddress))
 		{
+			std::cout << "Error connecting to camera stream, retrying " << count<< std::endl;
+			count++;
+			usleep(100000);
+		}
+
 			//Stream started
 			cout << "Successfully connected to Camera Stream" << std::endl;
 
@@ -811,7 +819,7 @@ void *VideoCap(void *args)
 			cout << "It took " << diffClock(start,end) << " seconds to set up stream " << endl;
 
 			clock_gettime(CLOCK_REALTIME, &bufferStart);
-		}
+
 
 		cout<<"Waiting for stream buffer to clear..."<<endl;
 
@@ -824,10 +832,10 @@ void *VideoCap(void *args)
 			//start timer to get time per frame
 			clock_gettime(CLOCK_REALTIME, &start);
 
-			//read frame and store it in global variable
-			pthread_mutex_lock(&frameMutex);
-			vcap.read(frame);
-			pthread_mutex_unlock(&frameMutex);
+				//read frame and store it in global variable
+				pthread_mutex_lock(&frameMutex);
+				vcap.read(frame);
+				pthread_mutex_unlock(&frameMutex);
 
 			//end timer to get time per frame
 			clock_gettime(CLOCK_REALTIME, &end);
@@ -877,6 +885,8 @@ void *HotGoalCounter(void *args)
 			else
 				targets.hotLeftOrRight = targets.targetLeftOrRight;
 			pthread_mutex_unlock(&targetMutex);
+
+			cout<<"this side hot"<<endl;
 		}
 		else if(timeNow<10)
 		{
