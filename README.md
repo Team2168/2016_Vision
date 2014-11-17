@@ -57,6 +57,10 @@ NEED TO SETUP BEAGLEBONE FIRST SO WE CAN COPY LIBRARIES FOR IT
 14. `sudo xhost +`
 14. Now the arm version of OpenCV is in `/home/OpenCVArm/opencv/platforms/linux/build_softfp/install`
 15. To verify you can run `file install/lib/libopencv_core.so.3.0.0` and see it is arm architecture
+16. SSH into bone `sudo ssh -x -l root 10.21.68.1.33`
+17. Copy ARM OpenCV shared libraries on desktop to bone `sudo scp -r kevin@10.21.68.104:/home/OpenCVArm/opencv/platforms/linux/build_hardfp/install/lib/* /lib`
+
+> note we run the last command from the target to avoid permission issues
 
 <pre>
 <b>Note: if you run into an error here where the linker ld can not find a certain library prefaced 
