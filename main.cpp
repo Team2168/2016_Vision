@@ -2,7 +2,7 @@
 #define MIN_WIDTH 120
 #define Y_IMAGE_RES 240
 #define VIEW_ANGLE 34.8665269
-#define AUTO_STEADY_STATE 0.150 //seconds
+#define AUTO_STEADY_STATE 1.9 //seconds
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -100,10 +100,10 @@ int minB = 0;
 int maxB = 30;
 
 //Target Ratio Ranges
-double MinHRatio = 2.5;
+double MinHRatio = 1.5;
 double MaxHRatio = 6.6;
 
-double MinVRatio = 2.5;
+double MinVRatio = 1.5;
 double MaxVRatio = 8.5;
 
 int MAX_SIZE = 255;
@@ -170,6 +170,9 @@ int main(int argc, const char* argv[])
 
 	struct timespec start, end;
 
+	double processTimer = 0;
+	int processCount = 1;
+
 	//run loop forever
 	while (true)
 	{
@@ -207,15 +210,19 @@ int main(int argc, const char* argv[])
 				clock_gettime(CLOCK_REALTIME, &end);
 
 				if(params.Timer)
-					cout << "It took " << diffClock(start,end) << " seconds to process frame"<< endl;
-			}
+				{
+					processTimer += diffClock(start,end);
+					cout << "It took " << diffClock(start,end) << " seconds to process frame \n";
+					cout << " Avg processing time: "<< processTimer/processCount << " seconds \n" ;
+					processCount += 1;
+				}
 
-
+				}
 
 			if(params.Visualize)
 				waitKey(5);
 
-			usleep(20000); //sleep for 5ms); // run 40 times a second
+			//usleep(1000); //20000 sleep for 5ms); // run 40 times a second
 
 
 		}
@@ -731,7 +738,7 @@ void *TCP_Recv_Thread(void *args)
 
 		//Only set validFrame after we wait a certain amount of time, and after
 		//process thread starts
-		if(targets.matchStart && diffClock(autoStart,end)>=0.150 && progRun && count2==0 )
+		if(targets.matchStart && diffClock(autoStart,end)>=AUTO_STEADY_STATE && progRun && count2==0 )
 		{
 			targets.validFrame = true;
 			count2++;
@@ -828,7 +835,8 @@ void *VideoCap(void *args)
 
 		cout<<"Waiting for stream buffer to clear..."<<endl;
 
-
+		int timerCount = 1;
+		double sumTime = 0;
 
 		//run in continuous loop
 		while (true)
@@ -846,8 +854,14 @@ void *VideoCap(void *args)
 			clock_gettime(CLOCK_REALTIME, &end);
 
 
+
 			if(struct_ptr->Timer)
-				cout << "It took FFMPEG " << diffClock(start,end) << " seconds to grab stream "<< endl;
+			{
+				sumTime += diffClock(start,end);
+				cout << "It took FFMPEG " << diffClock(start,end) << " seconds to grab stream \n";
+				cout<< "Avg FFMPEG Time Per Frame" << sumTime/timerCount << "seconds \n";
+				timerCount +=1;
+			}
 
 			//end timer to get time since stream started
 			clock_gettime(CLOCK_REALTIME, &bufferEnd);
@@ -864,7 +878,7 @@ void *VideoCap(void *args)
 
 			}
 
-					usleep(20000); //sleep for 5ms
+					//usleep(20000); //sleep for 5ms
 		}
 
 	}
