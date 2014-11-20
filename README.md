@@ -58,7 +58,7 @@ NEED TO SETUP BEAGLEBONE FIRST SO WE CAN COPY LIBRARIES FOR IT
 14. Now the arm version of OpenCV is in `/home/OpenCVArm/opencv/platforms/linux/build_softfp/install`
 15. To verify you can run `file install/lib/libopencv_core.so.3.0.0` and see it is arm architecture
 16. SSH into bone `sudo ssh -x -l root 10.21.68.1.33`
-17. Copy ARM OpenCV shared libraries on desktop to bone `sudo scp -r kevin@10.21.68.104:/home/OpenCVArm/opencv/platforms/linux/build_hardfp/install/lib/* /lib`
+17. Copy ARM OpenCV shared libraries on desktop to bone `sudo scp -r kevin@10.21.68.104:/home/OpenCVArm/opencv/platforms/linux/build_softfp/install/lib/* /lib`
 
 > note we run the last command from the target to avoid permission issues
 
@@ -108,7 +108,7 @@ If the library is not found, you need to transfer it from the bone.
 8. sudo ./configure --host=arm-linux-gnueabi --build=i686-linux CFLAGS='-Os' --with-ssl=/usr/bin/openssl --enable-smtp
 9. sudo make
 10. sudo make install
-11. now the  Arm version of the curl library is in /usr/local/
+11. now the  Arm version of the curl library is in /usr/local/lib and the header files are in /home/CurlArm/curl/includes
 
 
 #### A.2.4 Setup Eclipse to Cross Compile C++ Project
@@ -146,6 +146,19 @@ If the library is not found, you need to transfer it from the bone.
 26. Add curl
 27. Hit Apply and OK
 27. Now the eclipe IDE is setup
+
+> Note if you run into the following error during compiling it is most likely due to a broken symlink. To fix the symlink find out where the library.so should link too and recreate the symlinks. 
+
+<pre>
+relocation R_ARM_THM_MOVW_ABS_NC against `pthread_cancel' can not be used when making a shared object; recompile with -fPIC
+./src/main.o: could not read symbols: Bad value
+</pre>
+
+1. Use find to find the libraries `sudo find /usr/arm-linux-gnueabi -name *pthread*`
+2. Use file to determine what type of link it is: `file /usr/arm-linux-gnueabi/lib/libpthread.so`
+3. If its ascii use VI editor to edit the file, if its an executable use ln -s
+
+
 
 #### A.2.5 Build Code for BeagleBone (On Beaglebone)
 1. Open a terminal window
