@@ -9,7 +9,6 @@ RM := rm -rf
 # All of the sources participating in the build are defined here
 -include sources.mk
 -include src/subdir.mk
--include Rio2410/src/subdir.mk
 -include subdir.mk
 -include objects.mk
 
@@ -45,7 +44,7 @@ all: 2168_Vision
 2168_Vision: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C++ Linker'
-	arm-linux-gnueabi-g++-4.6 -L"/home/kevin/workspace/2168_Vision/_Libraries/softFP/lib_OpenCV" -L"/home/kevin/workspace/2168_Vision/_Libraries/softFP/lib_cpp" -o "2168_Vision" $(OBJS) $(USER_OBJS) $(LIBS)
+	arm-linux-gnueabi-g++-4.6 -L"/home/kevin/git/2168_Vision/_Libraries/softFP/lib_OpenCV" -L"/home/kevin/git/2168_Vision/_Libraries/softFP/lib_cpp" -o "2168_Vision" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
