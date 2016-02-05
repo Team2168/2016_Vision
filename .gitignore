@@ -1,2 +1,6 @@
 /.settings
 /.cproject
+/.ptp-sync
+*.gitignore
+*.mk
+makefile
