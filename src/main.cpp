@@ -5,13 +5,12 @@
 #define AUTO_STEADY_STATE 1.9
 
 #define TARGET_WIDTH_IN 20.1875
-#define FOV_WIDTH_PIX 640
+#define FOV_WIDTH_PIX 480
 #define CAMERA_WIDTH_FOV_ANGLE_RAD 0.371939933927842
 
+#include "mjpeg_server.cpp"
 #include <unistd.h>
 #include "tcp_client.cpp"
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <opencv2/opencv.hpp>
@@ -20,9 +19,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
-
 #include <pthread.h>
-
 
 
 using namespace cv;
@@ -145,6 +142,7 @@ pthread_t TCPsend;
 pthread_t TCPrecv;
 pthread_t MJPEG;
 pthread_t AutoCounter;
+pthread_t MJPEGHost;
 
 //TCP Steam
 tcp_client client;
@@ -186,6 +184,10 @@ int main(int argc, const char* argv[])
 
 	struct timespec start, end;
 
+	if (initMJPEGServer(8001))
+		cout << "Initalized MJPEG Server" << endl;
+
+	pthread_create(&MJPEGHost, NULL, host, &params);
 
 	//run loop forever
 	while (true)
@@ -333,12 +335,12 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			{
 
 				//if(hierarchy[i][100] != -1)
-				drawContours(thresholded, contours, i, RED, 2, 8, hierarchy, 0,Point());
+				drawContours(original, contours, i, RED, 2, 8, hierarchy, 0,Point());
 				//draw a minimum box around the target in green
 				Point2f rect_points[4];
 				minRect[i].points(rect_points);
 				for (int j = 0; j < 4; j++)
-					line(thresholded, rect_points[j], rect_points[(j + 1) % 4], BLUE, 1, 8);
+					line(original, rect_points[j], rect_points[(j + 1) % 4], BLUE, 1, 8);
 			}
 			//define minAreaBox
 			Rect box = minRect[i].boundingRect();
@@ -405,7 +407,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			line(original, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
 		}
 		if(params.Visualize)
-			imwrite("stream.jpg", thresholded);
+			setImageToHost(original);
 			//imshow("Contours", original); //Make a rectangle that encompasses the target
 	}
 	else
