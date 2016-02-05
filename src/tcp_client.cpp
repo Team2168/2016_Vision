@@ -1,7 +1,7 @@
 /**
     C++ client example using sockets
 */
-
+#include <unistd.h>
 #include "tcp_client.h"
 
 

@@ -2,7 +2,15 @@
 #define MIN_WIDTH 120
 #define Y_IMAGE_RES 240
 #define VIEW_ANGLE 34.8665269
-#define AUTO_STEADY_STATE 1.9 //seconds
+#define AUTO_STEADY_STATE 1.9
+
+#define TARGET_WIDTH_IN 20.1875
+#define FOV_WIDTH_PIX 640
+#define CAMERA_WIDTH_FOV_ANGLE_RAD 0.371939933927842
+
+#include <unistd.h>
+#include "tcp_client.cpp"
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +22,6 @@
 #include <sstream>
 
 #include <pthread.h>
-#include "tcp_client.h"
 
 
 
@@ -36,6 +43,7 @@ struct ProgParams
 	bool Debug;
 	bool Process;
 	bool USB_Cam;
+	bool FPS;
 };
 
 //Stuct to hold information about targets found
@@ -43,6 +51,8 @@ struct Target
 {
 	Rect HorizontalTarget;
 	Rect VerticalTarget;
+
+	Rect Target;
 
 	double HorizontalAngle;
 	double VerticalAngle;
@@ -99,20 +109,20 @@ const double PI = 3.141592653589793;
 
 //Thresholding parameters
 int minR = 0;
-int maxR = 30;
-int minG = 80; //160 for ip cam, 80 to support MS webcam
+int maxR = 180;
+int minG = 200; //160 for ip cam, 80 to support MS webcam
 int maxG = 255;
-int minB = 0;
-int maxB = 30;
+int minB = 200;
+int maxB = 255;
 
 //Target Ratio Ranges
-double MinHRatio = 1.5;
-double MaxHRatio = 6.6;
+double MinHRatio = 1.0;
+double MaxHRatio = 1.5;
 
-double MinVRatio = 1.5;
-double MaxVRatio = 8.5;
+double MinVRatio = 0.3;
+double MaxVRatio = 1;
 
-int MAX_SIZE = 255;
+int MAX_SIZE = 2000;
 
 //Some common colors to draw with
 const Scalar RED = Scalar(0, 0, 255),
@@ -203,7 +213,6 @@ int main(int argc, const char* argv[])
 				pthread_mutex_lock(&targetMutex);
 				findTarget(img, thresholded, targets, params);
 				CalculateDist(targets);
-
 				if(params.Debug)
 				{
 					cout<<"Vert: "<<targets.VertGoal<<endl;
@@ -217,6 +226,9 @@ int main(int argc, const char* argv[])
 
 				if(params.Timer)
 					cout << "It took " << diffClock(start,end) << " seconds to process frame \n";
+
+				if(params.FPS)
+					cout << "Processing at "  << 1/diffClock(start,end) << " FPS \n";
 
 
 			}
@@ -256,15 +268,8 @@ int main(int argc, const char* argv[])
  */
 void CalculateDist(Target& targets)
 {
-	//vertical target is 32 inches fixed
-	double targetHeight = 32.0;
-
-	//get vertical pixels from targets
-	int height = targets.VerticalTarget.height;
-
 	//d = Tft*FOVpixel/(2*Tpixel*tanΘ)
-	targets.targetDistance = Y_IMAGE_RES * targetHeight
-			/ (height * 12 * 2 * tan(VIEW_ANGLE * PI / (180 * 2)));
+	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD));
 }
 
 /**
@@ -295,7 +300,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	}
 
 	//run through all contours and remove small contours
-	unsigned int contourMin = 6;
+	unsigned int contourMin = 5;
 	for (vector<vector<Point> >::iterator it = contours.begin();
 			it != contours.end();)
 	{
@@ -313,7 +318,6 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 	/// Draw contours
 	Mat drawing = Mat::zeros(original.size(), CV_8UC3);
-
 	NullTargets(targets);
 
 	//run through large contours to see if they are our targerts
@@ -329,13 +333,12 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			{
 
 				//if(hierarchy[i][100] != -1)
-				//drawContours(original, contours, i, RED, 2, 8, hierarchy, 0,Point());
-
+				drawContours(thresholded, contours, i, RED, 2, 8, hierarchy, 0,Point());
 				//draw a minimum box around the target in green
 				Point2f rect_points[4];
 				minRect[i].points(rect_points);
 				for (int j = 0; j < 4; j++)
-					line(original, rect_points[j], rect_points[(j + 1) % 4], BLUE, 1, 8);
+					line(thresholded, rect_points[j], rect_points[(j + 1) % 4], BLUE, 1, 8);
 			}
 			//define minAreaBox
 			Rect box = minRect[i].boundingRect();
@@ -346,38 +349,40 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			//check if contour is vert, we use HWRatio because it is greater that 0 for vert target
 			if ((HWRatio > MinVRatio) && (HWRatio < MaxVRatio))
 			{
-				targets.VertGoal = true;
-				targets.VerticalTarget = box;
-				targets.VerticalAngle = minRect[i].angle;
-				targets.VerticalCenter = Point(box.x + box.width / 2,
-						box.y + box.height / 2);
-				targets.Vertical_H_W_Ratio = HWRatio;
-				targets.Vertical_W_H_Ratio = WHRatio;
+				targets.Target = box;
+//				targets.VertGoal = true;
+//				targets.VerticalTarget = box;
+//				targets.VerticalAngle = minRect[i].angle;
+//				targets.VerticalCenter = Point(box.x + box.width / 2,
+//						box.y + box.height / 2);
+//				targets.Vertical_H_W_Ratio = HWRatio;
+//				targets.Vertical_W_H_Ratio = WHRatio;
 
 			}
 			//check if contour is horiz, we use WHRatio because it is greater that 0 for vert target
 			else if ((WHRatio > MinHRatio) && (WHRatio < MaxHRatio))
 			{
-				targets.HorizGoal = true;
-				targets.HorizontalTarget = box;
-				targets.HorizontalAngle = minRect[i].angle;
-				targets.HorizontalCenter = Point(box.x + box.width / 2,
-						box.y + box.height / 2);
-				targets.Horizontal_H_W_Ratio = HWRatio;
-				targets.Horizontal_W_H_Ratio = WHRatio;
+				targets.Target = box;
+//				targets.HorizGoal = true;
+//				targets.HorizontalTarget = box;
+//				targets.HorizontalAngle = minRect[i].angle;
+//				targets.HorizontalCenter = Point(box.x + box.width / 2,
+//						box.y + box.height / 2);
+//				targets.Horizontal_H_W_Ratio = HWRatio;
+//				targets.Horizontal_W_H_Ratio = WHRatio;
 			}
 
 			if (targets.HorizGoal && targets.VertGoal)
 			{
-				targets.HotGoal = true;
-
-				//determine left or right
-				if (targets.VerticalCenter.x < targets.HorizontalCenter.x) //target is right
-					targets.targetLeftOrRight = 1;
-				else if (targets.VerticalCenter.x > targets.HorizontalCenter.x) //target is left
-					targets.targetLeftOrRight = -1;
-
-				targets.lastTargerLorR = targets.targetLeftOrRight;
+//				targets.HotGoal = true;
+//
+//				//determine left or right
+//				if (targets.VerticalCenter.x < targets.HorizontalCenter.x) //target is right
+//					targets.targetLeftOrRight = 1;
+//				else if (targets.VerticalCenter.x > targets.HorizontalCenter.x) //target is left
+//					targets.targetLeftOrRight = -1;
+//
+//				targets.lastTargerLorR = targets.targetLeftOrRight;
 
 			}
 
@@ -398,9 +403,9 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
 			line(original, center, center, YELLOW, 3);
 			line(original, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
-
 		}
-		//if(params.Visualize)
+		if(params.Visualize)
+			imwrite("stream.jpg", thresholded);
 			//imshow("Contours", original); //Make a rectangle that encompasses the target
 	}
 	else
@@ -409,8 +414,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		targets.targetLeftOrRight = 0;
 	}
 
-	if(params.Visualize)
-				imshow("Contours", original); //Make a rectangle that encompasses the target
+	//if(params.Visualize)
+				//imshow("Contours", original); //Make a rectangle that encompasses the target
 
 	pthread_mutex_lock(&matchStartMutex);
 	if (!targets.matchStart)
@@ -478,6 +483,7 @@ void initializeParams(ProgParams& params)
 	params.Visualize = false;
 	params.Process = true;
 	params.USB_Cam = false;
+	params.FPS = false;
 
 }
 
@@ -552,6 +558,10 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 			else if (string(argv[i]) == "-debug") //Enable debug output
 			{
 				params.Debug = true;
+			}
+			else if (string(argv[i]) == "-FPS") //Enable FPS output
+			{
+				params.FPS = true;
 			}
 			else if (string(argv[i]) == "-d") //Default Params
 			{
@@ -840,7 +850,8 @@ void *VideoCap(void *args)
 			//We specify desired frame size and fps in constructor
 			//Camera must be able to support specified framesize and frames per second
 			//or this will set camera to defaults
-			while (!vcap.open(videoStreamAddress, 320,240,7.5))
+			//while (!vcap.open(videoStreamAddress, 320,240,7.5))
+			while (!vcap.open(videoStreamAddress))
 			{
 				std::cout << "Error connecting to camera stream, retrying " << count<< std::endl;
 				count++;
@@ -851,7 +862,7 @@ void *VideoCap(void *args)
 			//all opencv v4l2 camera controls scale from 0.0 - 1.0
 
 			//vcap.set(CV_CAP_PROP_EXPOSURE_AUTO, 1);
-			vcap.set(CV_CAP_PROP_EXPOSURE_ABSOLUTE, 0.1);
+			//vcap.set(CV_CAP_PROP_EXPOSURE_ABSOLUTE, 0.1);
 			vcap.set(CV_CAP_PROP_BRIGHTNESS, 1);
 			vcap.set(CV_CAP_PROP_CONTRAST, 0);
 
@@ -1037,6 +1048,3 @@ void printCommandLineUsage()
 
 
 }
-
-
-
