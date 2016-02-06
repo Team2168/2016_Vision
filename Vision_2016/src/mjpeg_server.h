@@ -40,7 +40,6 @@ public:
     mjpeg_server();
     int initMJPEGServer(int port);
     void *host(void *args);
-    int send_image(int socket);
     void setImageToHost(cv::Mat image);
     void error(char *msg);
 };

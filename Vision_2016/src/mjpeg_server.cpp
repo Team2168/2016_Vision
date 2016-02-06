@@ -23,9 +23,6 @@ std::string boundary;
 
 bool imageReady;
 
-
-
-
 mjpeg_server::mjpeg_server()
 {
     sockfd = -1;
@@ -36,7 +33,7 @@ mjpeg_server::mjpeg_server()
 
 
 	initResponse =
-		"HTTP/1.0 200 OK\n"
+		"HTTP/1.1 200 OK\n"
 		"Cache-Control: no-store, no-cache, must-revalidate, pre-check=0, post-check=0, max-age=0\n"
 		"Content-Type: multipart/x-mixed-replace;boundary=boundarydonotcross\n\n";
 
@@ -86,85 +83,17 @@ void *mjpeg_server::host(void *args) {
 	imageReady = true;
 
 	while (1) {
-//		if (imageReady) {
-//			send(newsockfd, contentType.c_str(), strlen(contentType.c_str()), 0);
-//
-//			send(newsockfd, (&memoryJPEG), sizeof(memoryJPEG), 0);
-//
-//			send(newsockfd, boundary.c_str(), strlen(boundary.c_str()), 0);
-//		}
-//		usleep(10000);
+		// Always loop to keep the server alive
 	}
 
-}
-
-int mjpeg_server::send_image(int socket){
-
-	FILE *picture;
-   	int size, read_size, stat, packet_index;
-	char send_buffer[10240], read_buffer[256];
-	packet_index = 1;
-
-	picture = fopen("output.jpg", "r");
-	printf("Getting Picture Size\n");
-
-	if(picture == NULL) {
-		printf("Error Opening Image File"); }
-
-	fseek(picture, 0, SEEK_END);
-	size = ftell(picture);
-	fseek(picture, 0, SEEK_SET);
-	printf("Total Picture size: %i\n",size);
-
-	//Send Picture Size
-	printf("Sending Picture Size\n");
-	//write(socket, (void *)&size, sizeof(int));
-
-	//Send Picture as Byte Array
-	printf("Sending Picture as Byte Array\n");
-
-	//do { //Read while we get errors that are due to signals.
-	//	stat=read(socket, &read_buffer , 255);
-	//	printf("Bytes read: %i\n",stat);
-	//} while (stat < 0);
-
-	//printf("Received data in socket\n");
-	//printf("Socket data: %c\n", read_buffer);
-
-	while(!feof(picture)) {
-		read_size = fread(send_buffer, 1, sizeof(send_buffer)-1, picture);
-
-		//Send data through our socket
-		do{
-		stat = write(socket, send_buffer, read_size);
-		}while (stat < 0);
-
-		printf("Packet Number: %i\n",packet_index);
-		printf("Packet Size Sent: %i\n",read_size);
-		printf(" \n");
-		printf(" \n");
-
-		packet_index++;
-
-		//Zero out our send buffer
-		bzero(send_buffer, sizeof(send_buffer));
-	}
 }
 
 void mjpeg_server::setImageToHost(cv::Mat image)
 {
 	if (imageReady) {
 		cv::imencode(".jpg", image, buf, std::vector<int>() );
-
-		std::string pathname("output.jpg");
-
-		std::ofstream textout(pathname.c_str(), std::ios::out | std::ios::binary);
-		textout.write((const char*)&buf[0], buf.size());
-
-		textout.close();
-
 		send(newsockfd, contentType.c_str(), strlen(contentType.c_str()), 0);
-		send_image(newsockfd);
+		send(newsockfd, (const char*)&buf[0], buf.size(), 0);
 		send(newsockfd, boundary.c_str(), strlen(boundary.c_str()), 0);
 	}
 }

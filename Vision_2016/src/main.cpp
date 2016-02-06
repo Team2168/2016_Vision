@@ -8,9 +8,9 @@
 #define FOV_WIDTH_PIX 480
 #define CAMERA_WIDTH_FOV_ANGLE_RAD 0.371939933927842
 
-#include "mjpeg_server.h"
+#include "mjpeg_server.cpp"
 #include <unistd.h>
-#include "tcp_client.h"
+#include "tcp_client.cpp"
 #include <stdio.h>
 #include <stdlib.h>
 #include <opencv2/opencv.hpp>
