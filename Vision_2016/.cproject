@@ -98,6 +98,9 @@
 								<option id="nvcc.compiler.option.level.605209524" name="Generate host debug information (-g)" superClass="nvcc.compiler.option.level"/>
 								<option defaultValue="nvcc.compiler.optimization.level.most" id="nvcc.compiler.optimization.level.1804088539" name="Optimization Level" superClass="nvcc.compiler.optimization.level" valueType="enumerated"/>
 								<option id="nvcc.compiler.pic.1885295312" name="Position Independent Code (-fPIC)" superClass="nvcc.compiler.pic"/>
+								<option id="nvcc.compiler.include.paths.1956482592" superClass="nvcc.compiler.include.paths" valueType="includePath">
+									<listOptionValue builtIn="false" value="/usr/include"/>
+								</option>
 								<inputType id="nvcc.compiler.input.cu.1124481870" superClass="nvcc.compiler.input.cu"/>
 								<inputType id="nvcc.compiler.input.cpp.1767629192" superClass="nvcc.compiler.input.cpp"/>
 								<inputType id="nvcc.compiler.input.c.1159198884" superClass="nvcc.compiler.input.c"/>
@@ -132,6 +135,7 @@
 					<sass major="3" minor="0"/>
 					<ptx major="3" minor="5"/>
 				</executable>
+				<editor-arch major="3" minor="0"/>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
@@ -142,13 +146,22 @@
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="scannerConfiguration">
 		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.release.353695647;com.nvidia.cuda.ide.configuration.release.353695647.;nvcc.compiler.base.194232595;nvcc.compiler.input.cu.1124481870">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="com.nvidia.cuda.ide.build.NVCCPerProjectProfile"/>
+		</scannerConfigBuildInfo>
 		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.245843594;com.nvidia.cuda.ide.configuration.debug.245843594.;cdt.managedbuild.tool.gnu.cross.c.compiler.416649735;cdt.managedbuild.tool.gnu.c.compiler.input.1768441388">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileC"/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.245843594;com.nvidia.cuda.ide.configuration.debug.245843594.;nvcc.compiler.base.1676068005;nvcc.compiler.input.c.1326572238">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="com.nvidia.cuda.ide.build.NVCCPerProjectProfile"/>
 		</scannerConfigBuildInfo>
 		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.245843594;com.nvidia.cuda.ide.configuration.debug.245843594.;nvcc.compiler.base.1676068005;nvcc.compiler.input.cu.1547501695">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="com.nvidia.cuda.ide.build.NVCCPerProjectProfile"/>
 		</scannerConfigBuildInfo>
-		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.245843594;com.nvidia.cuda.ide.configuration.debug.245843594.;nvcc.compiler.base.1676068005;nvcc.compiler.input.c.1326572238">
+		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.release.353695647;com.nvidia.cuda.ide.configuration.release.353695647.;nvcc.compiler.base.194232595;nvcc.compiler.input.c.1159198884">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="com.nvidia.cuda.ide.build.NVCCPerProjectProfile"/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.release.353695647;com.nvidia.cuda.ide.configuration.release.353695647.;nvcc.compiler.base.194232595;nvcc.compiler.input.cpp.1767629192">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="com.nvidia.cuda.ide.build.NVCCPerProjectProfile"/>
 		</scannerConfigBuildInfo>
 		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.245843594;com.nvidia.cuda.ide.configuration.debug.245843594.;cdt.managedbuild.tool.gnu.cross.cpp.compiler.1265970458;cdt.managedbuild.tool.gnu.cpp.compiler.input.1528526870">
@@ -158,4 +171,5 @@
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="com.nvidia.cuda.ide.build.NVCCPerProjectProfile"/>
 		</scannerConfigBuildInfo>
 	</storageModule>
+	<storageModule moduleId="refreshScope"/>
 </cproject>
