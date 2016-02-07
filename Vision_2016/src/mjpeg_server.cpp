@@ -69,7 +69,9 @@ int mjpeg_server::initMJPEGServer(int port) {
 
 void *mjpeg_server::host(void *args) {
 
-	do{
+	//continuously listen and open socket until success
+	do
+	{
 	listen(sockfd,5);
      	clilen = sizeof(cli_addr);
      	newsockfd = accept(sockfd,
@@ -77,7 +79,8 @@ void *mjpeg_server::host(void *args) {
                  	&clilen);
      	if (newsockfd < 0)
           	error("ERROR on accept");
-	}while(newsockfd < 0);
+	}
+     	while ((newsockfd < 0));
     	bzero(buffer,  256);
      	n = recv(newsockfd,buffer,sizeof(buffer), 0);
 
@@ -104,16 +107,12 @@ void mjpeg_server::setImageToHost(cv::Mat image)
 		std::cout<<"Hello 0"<<std::endl;
 		cv::imencode(".jpg", image, buf, std::vector<int>() );
 
+		//check for failure/broken pipe and then restart listening on socket
+		//make sure signal(SIGPIPE, SIG_IGN) is set somewhere or Linux event handler will cause
+		//program to crash upon writing to a broken pipe
 		statusByte1 = 	send(newsockfd, contentType.c_str(), strlen(contentType.c_str()), 0);
-
-//		if (statusByte1 == -1 || statusByte2 == -1 || statusByte3 == -1)
-//		{
-//			std::cout<<"MJpeg Stream Lost Client, going back to listening"<<std::endl;
-//			imageReady = false;
-//			host(NULL);
-//
-//		}
-		//statusByte2 = send(newsockfd, (const char*)&buf[0], buf.size(), 0);
+		statusByte2 = send(newsockfd, (const char*)&buf[0], buf.size(), 0);
+		statusByte3 = send(newsockfd, boundary.c_str(), strlen(boundary.c_str()), 0);
 
 		if (statusByte1 == -1 || statusByte2 == -1 || statusByte3 == -1)
 		{
@@ -121,18 +120,10 @@ void mjpeg_server::setImageToHost(cv::Mat image)
 			imageReady = false;
 			host(NULL);
 		}
-//		statusByte3 = send(newsockfd, boundary.c_str(), strlen(boundary.c_str()), 0);
-//		if (statusByte1 == -1 || statusByte2 == -1 || statusByte3 == -1)
-//		{
-//			std::cout<<"MJpeg Stream Lost Client, going back to listening"<<std::endl;
-//			imageReady = false;
-//			host(NULL);
-//		}
 	}
 }
 void mjpeg_server::error(char *msg)
 {
 	perror(msg);
-	std::cout<<"Error"<<std::endl;
 	//exit(1);
 }

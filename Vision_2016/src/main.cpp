@@ -168,7 +168,7 @@ struct timespec autoStart, autoEnd;
 
 //Control process thread exectution
 bool progRun;
-bool readyToStream;
+
 
 
 int main(int argc, const char* argv[])
@@ -432,12 +432,11 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	//this will stream the camera feed. There will always be a stream
 	if(params.Visualize)
 	{
-		//lock mutex to store frame to a global variable
+		//lock mutex to store frame to a global variable, signal that new frame is ready
+		//and wake up any sleeping threads waiting for the signal
 		pthread_mutex_lock(&mjpegServerFrameMutex);
 		original.copyTo(imgToStream);
-		//mjpeg_s.setImageToHost(original);
-		//pthread_cond_signal(&newFrameToStreamSignal);
-		readyToStream = true;
+		pthread_cond_signal(&newFrameToStreamSignal);
 		pthread_mutex_unlock(&mjpegServerFrameMutex);
 		//imshow("Contours", original); //Make a rectangle that encompasses the target
 	}
@@ -1096,15 +1095,16 @@ void *MJPEG_host(void *args)
 
 	while (true)
 	{
-	pthread_mutex_lock(&mjpegServerFrameMutex);
-	if(readyToStream)
-	{
-		//pthread_cond_wait(&newFrameToStreamSignal, &mjpegServerFrameMutex);
+		//locks on each mpeg frame, and waits until a new frame is needed
+		//this loop doesn't need a sleep, because the signal handler will
+		//put it to sleep and only wake it up when a new frame is ready
+		//this method will only serve a new image, instead of serving a single
+		//image multiple times.
+		pthread_mutex_lock(&mjpegServerFrameMutex);
+		pthread_cond_wait(&newFrameToStreamSignal, &mjpegServerFrameMutex);
 		mjpeg_s.setImageToHost(imgToStream);
-	}
-	pthread_mutex_unlock(&mjpegServerFrameMutex);
+		pthread_mutex_unlock(&mjpegServerFrameMutex);
 
-	usleep(1000); // run 10 times a second
 	}
 
 	return NULL;
