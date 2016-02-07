@@ -20,6 +20,7 @@
 #include <iomanip>
 #include <sstream>
 #include <pthread.h>
+#include <sys/signal.h> //to ignore sigpipe
 
 
 using namespace cv;
@@ -136,7 +137,10 @@ const Scalar RED = Scalar(0, 0, 255),
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t matchStartMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mjpegServerFrameMutex = PTHREAD_MUTEX_INITIALIZER;
 
+//GLOBAL MUTEX SIGNAL VARIABLES
+pthread_cond_t newFrameToStreamSignal = PTHREAD_COND_INITIALIZER;
 
 //Thread Variables
 pthread_t TCPthread;
@@ -156,6 +160,7 @@ mjpeg_server mjpeg_s;
 //Store targets in global variable
 Target targets;
 Mat frame;
+Mat imgToStream;
 
 //Global Timestamps for auto
 struct timespec autoStart, autoEnd;
@@ -163,11 +168,13 @@ struct timespec autoStart, autoEnd;
 
 //Control process thread exectution
 bool progRun;
-
+bool readyToStream;
 
 
 int main(int argc, const char* argv[])
 {
+
+	signal(SIGPIPE, SIG_IGN); // ignore sigpipes
 
 	//Read command line inputs to determine how the program will execute
 	ProgParams params;
@@ -256,6 +263,8 @@ int main(int argc, const char* argv[])
 	pthread_join(TCPrecv, NULL);
 
 	pthread_join(MJPEG, NULL);
+	pthread_join(MJPEG_S_Thread, NULL);
+
 
 	//done
 	return 0;
@@ -422,8 +431,16 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	//If there is contours, this will stream the contours over the original image, if there is no contours
 	//this will stream the camera feed. There will always be a stream
 	if(params.Visualize)
-		mjpeg_s.setImageToHost(original);
-				//imshow("Contours", original); //Make a rectangle that encompasses the target
+	{
+		//lock mutex to store frame to a global variable
+		pthread_mutex_lock(&mjpegServerFrameMutex);
+		original.copyTo(imgToStream);
+		//mjpeg_s.setImageToHost(original);
+		//pthread_cond_signal(&newFrameToStreamSignal);
+		readyToStream = true;
+		pthread_mutex_unlock(&mjpegServerFrameMutex);
+		//imshow("Contours", original); //Make a rectangle that encompasses the target
+	}
 
 	pthread_mutex_lock(&matchStartMutex);
 	if (!targets.matchStart)
@@ -1063,13 +1080,33 @@ void *MJPEG_Server_Thread(void *args)
 	if (mjpeg_s.initMJPEGServer(8001))
 		cout << "Initalized MJPEG Server" << endl;
 
-	pthread_create(&MJPEGHost, NULL, MJPEG_host, args);
+	//listen for incoming connection, blocks until a client connections
+	mjpeg_s.host(args);
 
+	//once connected, we start streaming data
+	pthread_create(&MJPEGHost, NULL, MJPEG_host, args);
+	pthread_detach(MJPEGHost);
 	return NULL;
 
 }
 
 void *MJPEG_host(void *args)
 {
-	mjpeg_s.host(args);
+
+
+	while (true)
+	{
+	pthread_mutex_lock(&mjpegServerFrameMutex);
+	if(readyToStream)
+	{
+		//pthread_cond_wait(&newFrameToStreamSignal, &mjpegServerFrameMutex);
+		mjpeg_s.setImageToHost(imgToStream);
+	}
+	pthread_mutex_unlock(&mjpegServerFrameMutex);
+
+	usleep(1000); // run 10 times a second
+	}
+
+	return NULL;
+
 }

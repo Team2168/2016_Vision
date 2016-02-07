@@ -1,6 +1,7 @@
 
 #include "mjpeg_server.h"
 
+
 #define SSTR( x ) static_cast< std::ostringstream & >( \
         ( std::ostringstream() << std::dec << x ) ).str()
 
@@ -42,6 +43,8 @@ mjpeg_server::mjpeg_server()
 
 	boundary = "--boundarydonotcross";
 
+
+
 }
 
 
@@ -65,6 +68,8 @@ int mjpeg_server::initMJPEGServer(int port) {
 }
 
 void *mjpeg_server::host(void *args) {
+
+	do{
 	listen(sockfd,5);
      	clilen = sizeof(cli_addr);
      	newsockfd = accept(sockfd,
@@ -72,13 +77,20 @@ void *mjpeg_server::host(void *args) {
                  	&clilen);
      	if (newsockfd < 0)
           	error("ERROR on accept");
-    	bzero(buffer,256);
+	}while(newsockfd < 0);
+    	bzero(buffer,  256);
      	n = recv(newsockfd,buffer,sizeof(buffer), 0);
 
 	std::cout << buffer << std::endl;
 	std::cout << initResponse << std::endl;
 
-	send(newsockfd, initResponse.c_str(), strlen(initResponse.c_str()), 0);
+	if (send(newsockfd, initResponse.c_str(), strlen(initResponse.c_str()), 0)<0)
+	{
+		std::cout<<"MJpeg Stream Lost Client during init, going back to listening"<<std::endl;
+		imageReady = false;
+		host(NULL);
+
+	}
 
 	imageReady = true;
 
@@ -87,15 +99,40 @@ void *mjpeg_server::host(void *args) {
 
 void mjpeg_server::setImageToHost(cv::Mat image)
 {
+	int statusByte1, statusByte2, statusByte3;
 	if (imageReady) {
+		std::cout<<"Hello 0"<<std::endl;
 		cv::imencode(".jpg", image, buf, std::vector<int>() );
-		send(newsockfd, contentType.c_str(), strlen(contentType.c_str()), 0);
-		send(newsockfd, (const char*)&buf[0], buf.size(), 0);
-		send(newsockfd, boundary.c_str(), strlen(boundary.c_str()), 0);
+
+		statusByte1 = 	send(newsockfd, contentType.c_str(), strlen(contentType.c_str()), 0);
+
+//		if (statusByte1 == -1 || statusByte2 == -1 || statusByte3 == -1)
+//		{
+//			std::cout<<"MJpeg Stream Lost Client, going back to listening"<<std::endl;
+//			imageReady = false;
+//			host(NULL);
+//
+//		}
+		//statusByte2 = send(newsockfd, (const char*)&buf[0], buf.size(), 0);
+
+		if (statusByte1 == -1 || statusByte2 == -1 || statusByte3 == -1)
+		{
+			std::cout<<"MJpeg Stream Lost Client, going back to listening"<<std::endl;
+			imageReady = false;
+			host(NULL);
+		}
+//		statusByte3 = send(newsockfd, boundary.c_str(), strlen(boundary.c_str()), 0);
+//		if (statusByte1 == -1 || statusByte2 == -1 || statusByte3 == -1)
+//		{
+//			std::cout<<"MJpeg Stream Lost Client, going back to listening"<<std::endl;
+//			imageReady = false;
+//			host(NULL);
+//		}
 	}
 }
 void mjpeg_server::error(char *msg)
 {
 	perror(msg);
-	exit(1);
+	std::cout<<"Error"<<std::endl;
+	//exit(1);
 }
