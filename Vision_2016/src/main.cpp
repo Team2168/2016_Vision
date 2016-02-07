@@ -8,9 +8,9 @@
 #define FOV_WIDTH_PIX 480
 #define CAMERA_WIDTH_FOV_ANGLE_RAD 0.371939933927842
 
-#include "mjpeg_server.cpp"
+#include "mjpeg_server.h"
 #include <unistd.h>
-#include "tcp_client.cpp"
+#include "tcp_client.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <opencv2/opencv.hpp>
@@ -411,9 +411,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			line(original, center, center, YELLOW, 3);
 			line(original, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
 		}
-		if(params.Visualize)
-			mjpeg_s.setImageToHost(original);
-			//imshow("Contours", original); //Make a rectangle that encompasses the target
+
 	}
 	else
 	{
@@ -421,7 +419,10 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		targets.targetLeftOrRight = 0;
 	}
 
-	//if(params.Visualize)
+	//If there is contours, this will stream the contours over the original image, if there is no contours
+	//this will stream the camera feed. There will always be a stream
+	if(params.Visualize)
+		mjpeg_s.setImageToHost(original);
 				//imshow("Contours", original); //Make a rectangle that encompasses the target
 
 	pthread_mutex_lock(&matchStartMutex);

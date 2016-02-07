@@ -82,9 +82,6 @@ void *mjpeg_server::host(void *args) {
 
 	imageReady = true;
 
-	while (1) {
-		// Always loop to keep the server alive
-	}
 
 }
 
