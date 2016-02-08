@@ -168,7 +168,7 @@ struct timespec autoStart, autoEnd;
 
 //Control process thread exectution
 bool progRun;
-
+bool readyToStream;
 
 
 int main(int argc, const char* argv[])
@@ -433,7 +433,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	if(params.Visualize)
 	{
 		//lock mutex to store frame to a global variable, signal that new frame is ready
-		//and wake up any sleeping threads waiting for the signal
+		//and wake up any sleeping threads
 		pthread_mutex_lock(&mjpegServerFrameMutex);
 		original.copyTo(imgToStream);
 		pthread_cond_signal(&newFrameToStreamSignal);
@@ -1102,7 +1102,12 @@ void *MJPEG_host(void *args)
 		//image multiple times.
 		pthread_mutex_lock(&mjpegServerFrameMutex);
 		pthread_cond_wait(&newFrameToStreamSignal, &mjpegServerFrameMutex);
-		mjpeg_s.setImageToHost(imgToStream);
+		if (!mjpeg_s.setImageToHost(imgToStream))
+		{
+			//send fail so give up mutex lock and restart mjpeg server
+			pthread_mutex_unlock(&mjpegServerFrameMutex);
+			mjpeg_s.host(NULL);
+		}
 		pthread_mutex_unlock(&mjpegServerFrameMutex);
 
 	}

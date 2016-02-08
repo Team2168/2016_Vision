@@ -67,7 +67,7 @@ int mjpeg_server::initMJPEGServer(int port) {
 	return 1;
 }
 
-void *mjpeg_server::host(void *args) {
+void mjpeg_server::host(void *args) {
 
 	//continuously listen and open socket until success
 	do
@@ -100,11 +100,10 @@ void *mjpeg_server::host(void *args) {
 
 }
 
-void mjpeg_server::setImageToHost(cv::Mat image)
+bool mjpeg_server::setImageToHost(cv::Mat image)
 {
 	int statusByte1, statusByte2, statusByte3;
 	if (imageReady) {
-		std::cout<<"Hello 0"<<std::endl;
 		cv::imencode(".jpg", image, buf, std::vector<int>() );
 
 		//check for failure/broken pipe and then restart listening on socket
@@ -116,11 +115,12 @@ void mjpeg_server::setImageToHost(cv::Mat image)
 
 		if (statusByte1 == -1 || statusByte2 == -1 || statusByte3 == -1)
 		{
-			std::cout<<"MJpeg Stream Lost Client, going back to listening"<<std::endl;
 			imageReady = false;
-			host(NULL);
+			return false; //fail because send failed
 		}
+		return true; //success
 	}
+	return false; //fail because image isn't ready
 }
 void mjpeg_server::error(char *msg)
 {

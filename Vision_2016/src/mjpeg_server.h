@@ -39,8 +39,8 @@ private:
 public:
     mjpeg_server();
     int initMJPEGServer(int port);
-    void *host(void *args);
-    void setImageToHost(cv::Mat image);
+    void host(void *args);
+    bool setImageToHost(cv::Mat image);
     void error(char *msg);
 };
 
