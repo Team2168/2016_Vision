@@ -6,6 +6,7 @@
 
 #define TARGET_WIDTH_IN 20.1875
 #define FOV_WIDTH_PIX 480
+#define FOV_HEIGHT_PIX 640
 #define CAMERA_WIDTH_FOV_ANGLE_RAD 0.371939933927842
 
 #include "mjpeg_server.h"
@@ -51,6 +52,7 @@ struct Target
 	Rect VerticalTarget;
 
 	Rect Target;
+	double targetRotation;
 
 	double HorizontalAngle;
 	double VerticalAngle;
@@ -286,6 +288,13 @@ void CalculateDist(Target& targets)
 {
 	//d = Tft*FOVpixel/(2*Tpixel*tanΘ)
 	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD));
+}
+
+void CalculateRotat(Target& targets)
+{
+	double x_target_on_fov = (((2) * (targets.Target.width / 2)) / (FOV_HEIGHT_PIX)) - 1;
+	double relative_angle = (x_target_on_fov) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2);
+	targets.targetRotation = relative_angle;
 }
 
 /**
