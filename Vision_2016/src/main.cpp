@@ -5,8 +5,8 @@
 #define AUTO_STEADY_STATE 1.9
 
 #define TARGET_WIDTH_IN 20.1875
-#define FOV_WIDTH_PIX 480
-#define FOV_HEIGHT_PIX 640
+#define FOV_WIDTH_PIX 320
+#define FOV_HEIGHT_PIX 240
 #define CAMERA_WIDTH_FOV_ANGLE_RAD 0.371939933927842
 
 #include "mjpeg_server.h"
@@ -52,7 +52,7 @@ struct Target
 	Rect VerticalTarget;
 
 	Rect Target;
-	double targetRotation;
+	double TargetBearing;
 
 	double HorizontalAngle;
 	double VerticalAngle;
@@ -91,6 +91,7 @@ Mat ThresholdImage(Mat img);
 void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams& params);
 void NullTargets(Target& target);
 void CalculateDist(Target& targets);
+void CalculateBearing(Target& targets);
 
 //Threaded TCP Functions
 void *TCP_thread(void *args);
@@ -229,12 +230,11 @@ int main(int argc, const char* argv[])
 				pthread_mutex_lock(&targetMutex);
 				findTarget(img, thresholded, targets, params);
 				CalculateDist(targets);
+				CalculateBearing(targets);
 				if(params.Debug)
 				{
-					cout<<"Vert: "<<targets.VertGoal<<endl;
-					cout<<"Horiz: "<<targets.HorizGoal<<endl;
-					cout<<"Hot Goal: "<<targets.HotGoal<<endl;
 					cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
+					cout<<"Rotation: " <<targets.TargetBearing<<endl;
 				}
 				pthread_mutex_unlock(&targetMutex);
 
@@ -290,11 +290,12 @@ void CalculateDist(Target& targets)
 	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD));
 }
 
-void CalculateRotat(Target& targets)
+void CalculateBearing(Target& targets)
 {
-	double x_target_on_fov = (((2) * (targets.Target.width / 2)) / (FOV_HEIGHT_PIX)) - 1;
-	double relative_angle = (x_target_on_fov) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2);
-	targets.targetRotation = relative_angle;
+	double x = targets.Target.x + (targets.Target.width / 2);
+	double x_target_on_FOV = ((2 * x) / (FOV_HEIGHT_PIX)) - 1;
+	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (180 / PI);
+	targets.TargetBearing = bearing;
 }
 
 /**
