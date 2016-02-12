@@ -4,10 +4,16 @@
 #define VIEW_ANGLE 34.8665269
 #define AUTO_STEADY_STATE 1.9
 
-#define TARGET_WIDTH_IN 20.1875
-#define FOV_WIDTH_PIX 320
-#define FOV_HEIGHT_PIX 240
-#define CAMERA_WIDTH_FOV_ANGLE_RAD 0.371939933927842
+#define TARGET_WIDTH_IN 20.125
+#define FOV_WIDTH_PIX 640
+#define FOV_HEIGHT_PIX 480
+#define CAMERA_WIDTH_FOV_ANGLE_RAD 0.743879868
+#define CAMERA_HEIGHT_FOV_ANGLE_RAD 0.557909901
+#define CAM_ANGLE 31.5
+#define CAMERA_HEIGHT_MINUS_TARGET 42.375
+
+//8120934
+//TODO: make cam height FOV angle calculated based on frame width
 
 #include "mjpeg_server.h"
 #include <unistd.h>
@@ -52,6 +58,8 @@ struct Target
 	Rect VerticalTarget;
 
 	Rect Target;
+	double angle;
+
 	double TargetBearing;
 
 	double HorizontalAngle;
@@ -99,7 +107,7 @@ void *TCP_Send_Thread(void *args);
 void *TCP_Recv_Thread(void *args);
 void error(const char *msg);
 void *MJPEG_Server_Thread(void *args);
-void *MJPEG_host(void *args);
+void MJPEG_host(void *args);
 
 //Threaded Video Capture Function
 void *VideoCap(void *args);
@@ -115,7 +123,7 @@ int minR = 0;
 int maxR = 180;
 int minG = 200; //160 for ip cam, 80 to support MS webcam
 int maxG = 255;
-int minB = 200;
+int minB = 20;
 int maxB = 255;
 
 //Target Ratio Ranges
@@ -287,13 +295,25 @@ int main(int argc, const char* argv[])
 void CalculateDist(Target& targets)
 {
 	//d = Tft*FOVpixel/(2*Tpixel*tanΘ)
-	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD));
+
+	//double angled_width = (targets.Target.width / cos(targets.angle * (PI / 180)));
+
+	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2.0 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD / 2.0));
+	cout << "Line Dist: " << targets.targetDistance << endl;
+	targets.targetDistance = sqrt(( pow(targets.targetDistance, 2) - pow(CAMERA_HEIGHT_MINUS_TARGET, 2)));
+
+
+
+	cout << "Box Angle: " << targets.angle << endl;
+	cout << "Dist: " << targets.targetDistance << endl;
+	cout << "Target Width: " << targets.Target.width << endl;
 }
 
 void CalculateBearing(Target& targets)
 {
 	double x = targets.Target.x + (targets.Target.width / 2);
-	double x_target_on_FOV = ((2 * x) / (FOV_HEIGHT_PIX)) - 1;
+	cout << "Target X Center Value: " << x << endl;
+	double x_target_on_FOV = ((2 * x) / (FOV_WIDTH_PIX)) - 1;
 	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (180 / PI);
 	targets.TargetBearing = bearing;
 }
@@ -313,9 +333,14 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	vector<Vec4i> hierarchy;
 	vector<vector<Point> > contours;
 
+	//put cross hair on image
+	line(original, Point(FOV_WIDTH_PIX / 2, 0), Point(FOV_WIDTH_PIX/ 2, FOV_HEIGHT_PIX), GREEN, 2);
+	line(original, Point(0, FOV_HEIGHT_PIX / 2), Point(FOV_WIDTH_PIX, FOV_HEIGHT_PIX / 2), GREEN, 2);
 
 
-	//Find rectangles
+
+
+	//Find rectangle
 	findContours(thresholded, contours, hierarchy, RETR_EXTERNAL,
 			CHAIN_APPROX_SIMPLE);
 
@@ -378,7 +403,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 				targets.Target = box;
 //				targets.VertGoal = true;
 //				targets.VerticalTarget = box;
-//				targets.VerticalAngle = minRect[i].angle;
+				targets.angle = minRect[i].angle;
 //				targets.VerticalCenter = Point(box.x + box.width / 2,
 //						box.y + box.height / 2);
 //				targets.Vertical_H_W_Ratio = HWRatio;
@@ -391,7 +416,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 				targets.Target = box;
 //				targets.HorizGoal = true;
 //				targets.HorizontalTarget = box;
-//				targets.HorizontalAngle = minRect[i].angle;
+				targets.angle = minRect[i].angle;
 //				targets.HorizontalCenter = Point(box.x + box.width / 2,
 //						box.y + box.height / 2);
 //				targets.Horizontal_H_W_Ratio = HWRatio;
@@ -429,6 +454,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
 			line(original, center, center, YELLOW, 3);
 			line(original, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
+
 		}
 
 	}
@@ -446,7 +472,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		//and wake up any sleeping threads
 		pthread_mutex_lock(&mjpegServerFrameMutex);
 		original.copyTo(imgToStream);
-		pthread_cond_signal(&newFrameToStreamSignal);
+		//pthread_cond_signal(&newFrameToStreamSignal);
 		pthread_mutex_unlock(&mjpegServerFrameMutex);
 		//imshow("Contours", original); //Make a rectangle that encompasses the target
 	}
@@ -1093,14 +1119,17 @@ void *MJPEG_Server_Thread(void *args)
 	mjpeg_s.host(args);
 
 	//once connected, we start streaming data
-	pthread_create(&MJPEGHost, NULL, MJPEG_host, args);
-	pthread_detach(MJPEGHost);
+	//pthread_create(&MJPEGHost, NULL, MJPEG_host, args);
+	MJPEG_host(NULL);
+
 	return NULL;
 
 }
 
-void *MJPEG_host(void *args)
+void MJPEG_host(void *args)
 {
+
+	bool runServer = true;
 
 
 	while (true)
@@ -1110,18 +1139,32 @@ void *MJPEG_host(void *args)
 		//put it to sleep and only wake it up when a new frame is ready
 		//this method will only serve a new image, instead of serving a single
 		//image multiple times.
+		Mat img;
 		pthread_mutex_lock(&mjpegServerFrameMutex);
-		pthread_cond_wait(&newFrameToStreamSignal, &mjpegServerFrameMutex);
-		if (!mjpeg_s.setImageToHost(imgToStream))
-		{
-			//send fail so give up mutex lock and restart mjpeg server
-			pthread_mutex_unlock(&mjpegServerFrameMutex);
-			mjpeg_s.host(NULL);
-		}
+		imgToStream.copyTo(img);
 		pthread_mutex_unlock(&mjpegServerFrameMutex);
+		//pthread_cond_wait(&newFrameToStreamSignal, &mjpegServerFrameMutex);
+		if (~img.empty())
+			if(!mjpeg_s.setImageToHost(img) && runServer)
+			{
+				mjpeg_s.host(NULL);
+			}
+
+
+
+//		if(!runServer)
+//		{
+//			//send fail so give up mutex lock and restart mjpeg server
+//
+//			runServer = true;
+//		}
+
+
+
+		usleep(50000); //sleep for 50ms
 
 	}
 
-	return NULL;
+
 
 }
