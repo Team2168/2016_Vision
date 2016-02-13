@@ -11,10 +11,11 @@
 #define CAMERA_HEIGHT_FOV_ANGLE_RAD 0.557909901
 #define CAM_ANGLE 31.5
 #define CAMERA_HEIGHT_MINUS_TARGET 42.375
+#define CONTOUR_MIN_AREA 2000
 
-//8120934
+#define MJPEG_SERVER_PORT 8001
+
 //TODO: make cam height FOV angle calculated based on frame width
-
 #include "mjpeg_server.h"
 #include <unistd.h>
 #include "tcp_client.h"
@@ -240,10 +241,12 @@ int main(int argc, const char* argv[])
 				findTarget(img, thresholded, targets, params);
 				CalculateDist(targets);
 				CalculateBearing(targets);
+
 				if(params.Debug)
 				{
-					cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
-					cout<<"Rotation: " <<targets.TargetBearing<<endl;
+					cout<<"Verified Target:" << endl;
+					cout<<"\tDist:" <<targets.targetDistance<<endl;
+					cout<<"\tRotation: " <<targets.TargetBearing<<endl;
 				}
 				pthread_mutex_unlock(&targetMutex);
 
@@ -296,24 +299,12 @@ int main(int argc, const char* argv[])
 void CalculateDist(Target& targets)
 {
 	//d = Tft*FOVpixel/(2*Tpixel*tanΘ)
-
-	//double angled_width = (targets.Target.width / cos(targets.angle * (PI / 180)));
-
 	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2.0 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD / 2.0));
-	cout << "Line Dist: " << targets.targetDistance << endl;
-	targets.targetDistance = sqrt(( pow(targets.targetDistance, 2) - pow(CAMERA_HEIGHT_MINUS_TARGET, 2)));
-
-
-
-	cout << "Box Angle: " << targets.angle << endl;
-	cout << "Dist: " << targets.targetDistance << endl;
-	cout << "Target Width: " << targets.Target.width << endl;
 }
 
 void CalculateBearing(Target& targets)
 {
 	double x = targets.Target.x + (targets.Target.width / 2);
-	cout << "Target X Center Value: " << x << endl;
 	double x_target_on_FOV = ((2 * x) / (FOV_WIDTH_PIX)) - 1;
 	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (180 / PI);
 	targets.TargetBearing = bearing;
@@ -347,8 +338,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 	if(params.Debug)
 	{
-	cout << "Contours: " << contours.size() << endl;
-	cout << "Hierarchy: " << hierarchy.size() << endl;
+		//cout << "Contours: " << contours.size() << endl;
+		//cout << "Hierarchy: " << hierarchy.size() << endl;
 	}
 
 	//run through all contours and remove small contours
@@ -398,64 +389,26 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			double WHRatio = box.width / ((double) box.height);
 			double HWRatio = ((double) box.height) / box.width;
 
-			//check if contour is vert, we use HWRatio because it is greater that 0 for vert target
-			if ((HWRatio > MinVRatio) && (HWRatio < MaxVRatio))
-			{
+			if (box.width * box.height > CONTOUR_MIN_AREA) {
+				//check if contour is vert, we use HWRatio because it is greater that 0 for vert target
 				targets.Target = box;
-//				targets.VertGoal = true;
-//				targets.VerticalTarget = box;
 				targets.angle = minRect[i].angle;
-//				targets.VerticalCenter = Point(box.x + box.width / 2,
-//						box.y + box.height / 2);
-//				targets.Vertical_H_W_Ratio = HWRatio;
-//				targets.Vertical_W_H_Ratio = WHRatio;
-
-			}
-			//check if contour is horiz, we use WHRatio because it is greater that 0 for vert target
-			else if ((WHRatio > MinHRatio) && (WHRatio < MaxHRatio))
-			{
-				targets.Target = box;
-//				targets.HorizGoal = true;
-//				targets.HorizontalTarget = box;
-				targets.angle = minRect[i].angle;
-//				targets.HorizontalCenter = Point(box.x + box.width / 2,
-//						box.y + box.height / 2);
-//				targets.Horizontal_H_W_Ratio = HWRatio;
-//				targets.Horizontal_W_H_Ratio = WHRatio;
 			}
 
-			if (targets.HorizGoal && targets.VertGoal)
-			{
-//				targets.HotGoal = true;
-//
-//				//determine left or right
-//				if (targets.VerticalCenter.x < targets.HorizontalCenter.x) //target is right
-//					targets.targetLeftOrRight = 1;
-//				else if (targets.VerticalCenter.x > targets.HorizontalCenter.x) //target is left
-//					targets.targetLeftOrRight = -1;
-//
-//				targets.lastTargerLorR = targets.targetLeftOrRight;
-
-			}
-
-			if(params.Debug)
-			{
-				cout<<"Contour: "<<i<<endl;
-				cout<<"\tX: "<<box.x<<endl;
-				cout<<"\tY: "<<box.y<<endl;
-				cout<<"\tHeight: "<<box.height<<endl;
-				cout<<"\tWidth: "<<box.width<<endl;
-				cout<<"\tangle: "<<minRect[i].angle<<endl;
-				cout<<"\tRatio (W/H): "<<WHRatio<<endl;
-				cout<<"\tRatio (H/W): "<<HWRatio<<endl;
-				cout<<"\tArea: "<<box.height*box.width<<endl;
-			}
+//			if(params.Debug)
+//			{
+//				cout<<"Contour: "<<i<<endl;
+//				cout<<"\tX: "<<box.x<<endl;
+//				cout<<"\tY: "<<box.y<<endl;
+//				cout<<"\tHeight: "<<box.height<<endl;
+//				cout<<"\tWidth: "<<box.width<<endl;
+//				cout<<"\tangle: "<<minRect[i].angle<<endl;
+//				cout<<"\tArea: "<<box.height*box.width<<endl;
+//			}
 
 			//ID the center in yellow
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
 			line(original, center, center, YELLOW, 3);
-			line(original, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
-
 		}
 
 	}
@@ -760,9 +713,7 @@ void *TCP_Send_Thread(void *args)
 		stringstream message;
 
 		//create string stream message;
-		message << targets.matchStart << ","<< targets.validFrame << "," << targets.HotGoal << ","
-				<< targets.cameraConnected << "," << progRun << ","<< targets.hotLeftOrRight << ","
-				<< targets.targetDistance << "," << count << "\n";
+		message << "ABC" << endl;
 
 		//send message over pipe
 		client.send_data(message.str());
@@ -803,53 +754,52 @@ void *TCP_Send_Thread(void *args)
 
 void *TCP_Recv_Thread(void *args)
 {
-	int count1 = 0;
-	int count2 = 0;
-	struct timespec end;
-
-	while (true)
-	{
-		//Set Match State, should be single int
-//		pthread_mutex_lock(&matchStartMutex);
-		targets.matchStart = atoi(client.receive(5).c_str());
-
-		if(!targets.matchStart)
-		{
-			count1=0;
-			count2=0;
-			targets.validFrame = false;
-
-		}
-
-		//once the match starts, we start a timer and run it in
-		//a new thread, we use a count variable so we only run this once
-		if(targets.matchStart && count1==0)
-		{
-			clock_gettime(CLOCK_REALTIME, &autoStart);
-			count1++;
-			pthread_create(&AutoCounter, NULL, HotGoalCounter, args);
-		}
-
-
-		clock_gettime(CLOCK_REALTIME, &end);
-
-		//Only set validFrame after we wait a certain amount of time, and after
-		//process thread starts
-		if(targets.matchStart && diffClock(autoStart,end)>=AUTO_STEADY_STATE && progRun && count2==0 )
-		{
-			targets.validFrame = true;
-			count2++;
-		}
-
-
-//		pthread_mutex_unlock(&matchStartMutex);
-
-		usleep(20000); // run 5 times a second
-
-	}
-
+//	int count1 = 0;
+//	int count2 = 0;
+//	struct timespec end;
+//
+//	while (true)
+//	{
+//		//Set Match State, should be single int
+////		pthread_mutex_lock(&matchStartMutex);
+//		targets.matchStart = atoi(client.receive(5).c_str());
+//
+//		if(!targets.matchStart)
+//		{
+//			count1=0;
+//			count2=0;
+//			targets.validFrame = false;
+//
+//		}
+//
+//		//once the match starts, we start a timer and run it in
+//		//a new thread, we use a count variable so we only run this once
+//		if(targets.matchStart && count1==0)
+//		{
+//			clock_gettime(CLOCK_REALTIME, &autoStart);
+//			count1++;
+//			pthread_create(&AutoCounter, NULL, HotGoalCounter, args);
+//		}
+//
+//
+//		clock_gettime(CLOCK_REALTIME, &end);
+//
+//		//Only set validFrame after we wait a certain amount of time, and after
+//		//process thread starts
+//		if(targets.matchStart && diffClock(autoStart,end)>=AUTO_STEADY_STATE && progRun && count2==0 )
+//		{
+//			targets.validFrame = true;
+//			count2++;
+//		}
+//
+//
+////		pthread_mutex_unlock(&matchStartMutex);
+//
+//		usleep(20000); // run 5 times a second
+//
+//	}
+//
 	return NULL;
-
 }
 
 /**
@@ -1120,14 +1070,17 @@ void printCommandLineUsage()
 void *MJPEG_Server_Thread(void *args)
 {
 
-	if (mjpeg_s.initMJPEGServer(8001))
+	if (mjpeg_s.initMJPEGServer(MJPEG_SERVER_PORT))
+	{
 		cout << "Initalized MJPEG Server" << endl;
-
-
+		cout << "MJPEG Server Port: " << MJPEG_SERVER_PORT << endl;
+	}
 
 	//listen for incoming connection, blocks until a client connections
-	while (true) {
-		if (restartMJPEGServer) {
+	while (true)
+	{
+		if (restartMJPEGServer)
+		{
 			mjpeg_s.host(args);
 			restartMJPEGServer = false;
 		}
@@ -1140,44 +1093,3 @@ void *MJPEG_Server_Thread(void *args)
 	return NULL;
 
 }
-
-void MJPEG_host(void *args)
-{
-
-	bool runServer = true;
-
-	while (true)
-	{
-		cout<<endl<<"Hello"<<endl;
-		//locks on each mpeg frame, and waits until a new frame is needed
-		//this loop doesn't need a sleep, because the signal handler will
-		//put it to sleep and only wake it up when a new frame is ready
-		//this method will only serve a new image, instead of serving a single
-		//image multiple times.
-		Mat img;
-//		pthread_mutex_lock(&mjpegServerFrameMutex);
-//		imgToStream.copyTo(img);
-//		pthread_mutex_unlock(&mjpegServerFrameMutex);
-		//pthread_cond_wait(&newFrameToStreamSignal, &mjpegServerFrameMutex);
-//		if (~img.empty())
-//			if(!mjpeg_s.setImageToHost(img) && runServer)
-//			{
-//				mjpeg_s.host(NULL);
-//			}
-
-
-
-//		if(!runServer)
-//		{
-//			//send fail so give up mutex lock and restart mjpeg server
-//
-//			runServer = true;
-//		}
-
-
-
-		usleep(50000); //sleep for 50ms
-
-	}
-}
-
