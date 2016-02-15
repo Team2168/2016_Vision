@@ -116,6 +116,8 @@ void *VideoCap(void *args);
 //Threaded Counter Function
 void *HotGoalCounter(void *args);
 
+void Host_Image(Mat original);
+
 //GLOBAL CONSTANTS
 const double PI = 3.141592653589793;
 
@@ -428,11 +430,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		//original.copyTo(imgToStream);
 		//pthread_cond_signal(&newFrameToStreamSignal);
 		//pthread_mutex_unlock(&mjpegServerFrameMutex);
-		if(!mjpeg_s.setImageToHost(original))
-		{
-			//mjpeg_s.host(NULL);
-			restartMJPEGServer = true;
-		}
+		Host_Image(original);
 
 		//mjpeg_s.setImageToHost(original);
 		//imshow("Contours", original); //Make a rectangle that encompasses the target
@@ -713,7 +711,8 @@ void *TCP_Send_Thread(void *args)
 		stringstream message;
 
 		//create string stream message;
-		message << "ABC" << endl;
+		message << "1," << targets.TargetBearing << "," <<
+				targets.targetDistance << endl;
 
 		//send message over pipe
 		client.send_data(message.str());
@@ -1092,4 +1091,13 @@ void *MJPEG_Server_Thread(void *args)
 
 	return NULL;
 
+}
+
+void Host_Image(Mat original)
+{
+	if(!mjpeg_s.setImageToHost(original))
+	{
+		//mjpeg_s.host(NULL);
+		restartMJPEGServer = true;
+	}
 }
