@@ -418,22 +418,22 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			ostringstream output;
 
 			output << "Dist: " << targets.targetDistance;
-			putText(original, output.str(), Point(center.x + 10, center.y), FONT_HERSHEY_PLAIN, 1, ORANGE, 1, 1);
+			putText(original, output.str(), Point(center.x + 10, center.y), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
 
 			output.str("");
 			output.clear();
 			output << "Bearing: " << targets.TargetBearing;
-			putText(original, output.str(), Point(center.x + 10, center.y + 10), FONT_HERSHEY_PLAIN, 1, ORANGE, 1, 1);
+			putText(original, output.str(), Point(center.x + 10, center.y + 15), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
 
 			output.str("");
 			output.clear();
 			output << "Width: " << targets.Target.width;
-			putText(original, output.str(), Point(center.x + 10, center.y + 20), FONT_HERSHEY_PLAIN, 1, ORANGE, 1, 1);
+			putText(original, output.str(), Point(center.x + 10, center.y + 30), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
 
 			output.str("");
 			output.clear();
 			output << "Angle: " << targets.angle;
-			putText(original, output.str(), Point(center.x + 10, center.y + 30), FONT_HERSHEY_PLAIN, 1, ORANGE, 1, 1);
+			putText(original, output.str(), Point(center.x + 10, center.y + 45), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
 
 
 		}
