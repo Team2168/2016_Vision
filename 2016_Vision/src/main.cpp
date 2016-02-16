@@ -126,7 +126,7 @@ int minR = 0;
 int maxR = 180;
 int minG = 200; //160 for ip cam, 80 to support MS webcam
 int maxG = 255;
-int minB = 20;
+int minB = 0;
 int maxB = 255;
 
 //Target Ratio Ranges
@@ -344,15 +344,16 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		//cout << "Hierarchy: " << hierarchy.size() << endl;
 	}
 
+	Rect rect;
+
 	//run through all contours and remove small contours
-	unsigned int contourMin = 5;
+	unsigned int contourMin = 90;
 	for (vector<vector<Point> >::iterator it = contours.begin();
 			it != contours.end();)
 	{
-		//cout<<"Contour Size: "<<it->size()<<endl;
+		cout << "Contour Size: " << it->size() << endl;
 		if (it->size() < contourMin)
 			it = contours.erase(it);
-
 		else
 			++it;
 
@@ -397,20 +398,41 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 				targets.angle = minRect[i].angle;
 			}
 
-//			if(params.Debug)
-//			{
-//				cout<<"Contour: "<<i<<endl;
-//				cout<<"\tX: "<<box.x<<endl;
-//				cout<<"\tY: "<<box.y<<endl;
-//				cout<<"\tHeight: "<<box.height<<endl;
-//				cout<<"\tWidth: "<<box.width<<endl;
-//				cout<<"\tangle: "<<minRect[i].angle<<endl;
-//				cout<<"\tArea: "<<box.height*box.width<<endl;
-//			}
+			if(params.Debug)
+			{
+				cout<<"Contour: "<<i<<endl;
+				cout<<"\tX: "<<box.x<<endl;
+				cout<<"\tY: "<<box.y<<endl;
+				cout<<"\tHeight: "<<box.height<<endl;
+				cout<<"\tWidth: "<<box.width<<endl;
+				cout<<"\tangle: "<<minRect[i].angle<<endl;
+				cout<<"\tArea: "<<box.height*box.width<<endl;
+			}
+
+			CalculateDist(targets);
+			CalculateBearing(targets);
 
 			//ID the center in yellow
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
 			line(original, center, center, YELLOW, 3);
+			ostringstream output;
+
+			output << "Dist: " << targets.targetDistance;
+			putText(original, output.str(), Point(center.x + 10, center.y), FONT_HERSHEY_PLAIN, 1, ORANGE, 1, 1);
+
+			output.flush();
+			output << "Bearing: " << targets.TargetBearing;
+			putText(original, output.str(), Point(center.x + 10, center.y + 10), FONT_HERSHEY_PLAIN, 1, ORANGE, 1, 1);
+
+			output.flush();
+			output << "Width: " << targets.Target.width;
+			putText(original, output.str(), Point(center.x + 10, center.y + 20), FONT_HERSHEY_PLAIN, 1, ORANGE, 1, 1);
+
+			output.flush();
+			output << "Angle: " << targets.angle;
+			putText(original, output.str(), Point(center.x + 10, center.y + 30), FONT_HERSHEY_PLAIN, 1, ORANGE, 1, 1);
+
+
 		}
 
 	}
