@@ -24,6 +24,7 @@ std::string boundary;
 
 bool imageReady;
 
+
 mjpeg_server::mjpeg_server()
 {
     sockfd = -1;
