@@ -309,7 +309,7 @@ void CalculateBearing(Target& targets)
 {
 	double x = targets.Target.x + (targets.Target.width / 2);
 	double x_target_on_FOV = ((2 * x) / (FOV_WIDTH_PIX)) - 1;
-	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (180 / PI) - ROBOT_ANGLE_OFFSET;
+	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (-180 / PI) - ROBOT_ANGLE_OFFSET;
 	targets.TargetBearing = bearing;
 }
 
