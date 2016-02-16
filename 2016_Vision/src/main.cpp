@@ -12,6 +12,7 @@
 #define CAM_ANGLE 31.5
 #define CAMERA_HEIGHT_MINUS_TARGET 42.375
 #define CONTOUR_MIN_AREA 2000
+#define ROBOT_ANGLE_OFFSET 0.0
 
 #define MJPEG_SERVER_PORT 8001
 
@@ -308,7 +309,7 @@ void CalculateBearing(Target& targets)
 {
 	double x = targets.Target.x + (targets.Target.width / 2);
 	double x_target_on_FOV = ((2 * x) / (FOV_WIDTH_PIX)) - 1;
-	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (180 / PI);
+	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (180 / PI) - ROBOT_ANGLE_OFFSET;
 	targets.TargetBearing = bearing;
 }
 
@@ -340,14 +341,14 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 	if(params.Debug)
 	{
-		//cout << "Contours: " << contours.size() << endl;
-		//cout << "Hierarchy: " << hierarchy.size() << endl;
+		cout << "Contours: " << contours.size() << endl;
+		cout << "Hierarchy: " << hierarchy.size() << endl;
 	}
 
 	Rect rect;
 
 	//run through all contours and remove small contours
-	unsigned int contourMin = 90;
+	unsigned int contourMin = 50;
 	for (vector<vector<Point> >::iterator it = contours.begin();
 			it != contours.end();)
 	{
@@ -409,6 +410,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 				cout<<"\tArea: "<<box.height*box.width<<endl;
 			}
 
+
+			//calculate distance and target to each target
 			CalculateDist(targets);
 			CalculateBearing(targets);
 
