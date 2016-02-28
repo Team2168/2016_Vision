@@ -4,9 +4,12 @@
 #define VIEW_ANGLE 34.8665269
 #define AUTO_STEADY_STATE 1.9
 
-#define TARGET_WIDTH_IN 20.1875
-#define FOV_WIDTH_PIX 240
-#define CAMERA_WIDTH_FOV_ANGLE_RAD 0.371939933927842
+#define TARGET_WIDTH_IN 20.125
+#define FOV_WIDTH_PIX 320
+#define FOV_HEIGHT_PIX 240
+#define CAMERA_WIDTH_FOV_ANGLE_RAD 0.743879868
+#define ROBOT_ANGLE_OFFSET 0.0
+
 
 #include "mjpeg_server.h"
 #include <unistd.h>
@@ -51,6 +54,9 @@ struct Target
 	Rect VerticalTarget;
 
 	Rect Target;
+	double TargetBearing;
+	double TargetBoxAngle;
+
 
 	double HorizontalAngle;
 	double VerticalAngle;
@@ -89,6 +95,7 @@ Mat ThresholdImage(Mat img);
 void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams& params);
 void NullTargets(Target& target);
 void CalculateDist(Target& targets);
+void CalculateBearing(Target& targets);
 
 //Threaded TCP Functions
 void *TCP_thread(void *args);
@@ -227,12 +234,13 @@ int main(int argc, const char* argv[])
 				pthread_mutex_lock(&targetMutex);
 				findTarget(img, thresholded, targets, params);
 				CalculateDist(targets);
+				CalculateBearing(targets);
+
 				if(params.Debug)
 				{
-					cout<<"Vert: "<<targets.VertGoal<<endl;
-					cout<<"Horiz: "<<targets.HorizGoal<<endl;
-					cout<<"Hot Goal: "<<targets.HotGoal<<endl;
-					cout<<"Dist:" <<targets.targetDistance<<endl<<endl;
+					cout<<"Verified Target:" << endl;
+					cout<<"\tDist:" <<targets.targetDistance<<endl;
+					cout<<"\tRotation: " <<targets.TargetBearing<<endl;
 				}
 				pthread_mutex_unlock(&targetMutex);
 
@@ -285,8 +293,18 @@ int main(int argc, const char* argv[])
 void CalculateDist(Target& targets)
 {
 	//d = Tft*FOVpixel/(2*Tpixel*tanΘ)
-	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD));
+	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2.0 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD / 2.0));
 }
+
+void CalculateBearing(Target& targets)
+{
+	double x = targets.Target.x + (targets.Target.width / 2);
+	double x_target_on_FOV = ((2 * x) / (FOV_WIDTH_PIX)) - 1;
+	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (-180 / PI) - ROBOT_ANGLE_OFFSET;
+	targets.TargetBearing = bearing;
+}
+
+
 
 /**
  * This function scans through an image and determins
@@ -302,6 +320,11 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 	vector<Vec4i> hierarchy;
 	vector<vector<Point> > contours;
+
+
+	//put cross hair on image
+	line(original, Point(FOV_WIDTH_PIX / 2, 0), Point(FOV_WIDTH_PIX/ 2, FOV_HEIGHT_PIX), GREEN, 2);
+	line(original, Point(0, FOV_HEIGHT_PIX / 2), Point(FOV_WIDTH_PIX, FOV_HEIGHT_PIX / 2), GREEN, 2);
 
 
 
@@ -358,6 +381,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			}
 			//define minAreaBox
 			Rect box = minRect[i].boundingRect();
+			targets.TargetBoxAngle = minRect[i].angle;
 
 			double WHRatio = box.width / ((double) box.height);
 			double HWRatio = ((double) box.height) / box.width;
@@ -415,11 +439,36 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 				cout<<"\tArea: "<<box.height*box.width<<endl;
 			}
 
+			//calculate distance and target to each target
+			CalculateDist(targets);
+			CalculateBearing(targets);
+
 			//ID the center in yellow
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
 			line(original, center, center, YELLOW, 3);
-			line(original, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
+			ostringstream output;
+
+			output << "Dist: " << targets.targetDistance;
+			putText(original, output.str(), Point(center.x + 10, center.y), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+			output.str("");
+			output.clear();
+			output << "Bearing: " << targets.TargetBearing;
+			putText(original, output.str(), Point(center.x + 10, center.y + 15), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+			output.str("");
+			output.clear();
+			output << "Width: " << targets.Target.width;
+			putText(original, output.str(), Point(center.x + 10, center.y + 30), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+			output.str("");
+			output.clear();
+			output << "Angle: " << targets.TargetBoxAngle;
+			putText(original, output.str(), Point(center.x + 10, center.y + 45), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+
 		}
+
 
 	}
 	else
