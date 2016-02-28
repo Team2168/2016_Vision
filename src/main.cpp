@@ -1,30 +1,16 @@
-/*
-
-Copyright (C) 2014  Kevin Harrilal, Control Engineer, Aluminum Falcon Robotics Inc.
-kevin@team2168.org
-
-Dec 31, 2014
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>
-
-*/
 #define _USE_MATH_DEFINES
 #define MIN_WIDTH 120
 #define Y_IMAGE_RES 240
 #define VIEW_ANGLE 34.8665269
-#define AUTO_STEADY_STATE 1.9 //seconds
+#define AUTO_STEADY_STATE 1.9
 
+#define TARGET_WIDTH_IN 20.1875
+#define FOV_WIDTH_PIX 240
+#define CAMERA_WIDTH_FOV_ANGLE_RAD 0.371939933927842
+
+#include "mjpeg_server.h"
+#include <unistd.h>
+#include "tcp_client.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <opencv2/opencv.hpp>
@@ -33,8 +19,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
-#include <unistd.h>
 #include <pthread.h>
+#include <sys/signal.h> //to ignore sigpipe
+
 
 using namespace cv;
 using namespace std;
@@ -54,6 +41,7 @@ struct ProgParams
 	bool Debug;
 	bool Process;
 	bool USB_Cam;
+	bool FPS;
 };
 
 //Stuct to hold information about targets found
@@ -61,6 +49,8 @@ struct Target
 {
 	Rect HorizontalTarget;
 	Rect VerticalTarget;
+
+	Rect Target;
 
 	double HorizontalAngle;
 	double VerticalAngle;
@@ -92,36 +82,47 @@ struct Target
 //TODO: add pre- and post- comments for each function
 void parseCommandInputs(int argc, const char* argv[], ProgParams &params);
 void printCommandLineUsage();
+Mat GetOriginalImage(const ProgParams& params);
 void initializeParams(ProgParams& params);
 double diffClock(timespec start, timespec end);
 Mat ThresholdImage(Mat img);
 void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams& params);
 void NullTargets(Target& target);
 void CalculateDist(Target& targets);
+
+//Threaded TCP Functions
+void *TCP_thread(void *args);
+void *TCP_Send_Thread(void *args);
+void *TCP_Recv_Thread(void *args);
 void error(const char *msg);
+void *MJPEG_Server_Thread(void *args);
+void *MJPEG_host(void *args);
 
 //Threaded Video Capture Function
 void *VideoCap(void *args);
+
+//Threaded Counter Function
+void *HotGoalCounter(void *args);
 
 //GLOBAL CONSTANTS
 const double PI = 3.141592653589793;
 
 //Thresholding parameters
 int minR = 0;
-int maxR = 30;
-int minG = 80; //160 for ip cam, 80 to support MS webcam
+int maxR = 50;
+int minG = 200; //160 for ip cam, 80 to support MS webcam
 int maxG = 255;
-int minB = 0;
-int maxB = 30;
+int minB = 200;
+int maxB = 255;
 
 //Target Ratio Ranges
-double MinHRatio = 1.5;
-double MaxHRatio = 6.6;
+double MinHRatio = 1.0;
+double MaxHRatio = 1.5;
 
-double MinVRatio = 1.5;
-double MaxVRatio = 8.5;
+double MinVRatio = 0.3;
+double MaxVRatio = 1;
 
-int MAX_SIZE = 255;
+int MAX_SIZE = 2000;
 
 //Some common colors to draw with
 const Scalar RED = Scalar(0, 0, 255),
@@ -136,16 +137,30 @@ const Scalar RED = Scalar(0, 0, 255),
 pthread_mutex_t targetMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t matchStartMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t frameMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mjpegServerFrameMutex = PTHREAD_MUTEX_INITIALIZER;
 
+//GLOBAL MUTEX SIGNAL VARIABLES
+pthread_cond_t newFrameToStreamSignal = PTHREAD_COND_INITIALIZER;
 
 //Thread Variables
+pthread_t TCPthread;
+pthread_t TCPsend;
+pthread_t TCPrecv;
 pthread_t MJPEG;
 pthread_t AutoCounter;
+pthread_t MJPEG_S_Thread;
+pthread_t MJPEGHost;
 
+//TCP Steam
+tcp_client client;
+
+//MJPEG Stream
+mjpeg_server mjpeg_s;
 
 //Store targets in global variable
 Target targets;
 Mat frame;
+Mat imgToStream;
 
 //Global Timestamps for auto
 struct timespec autoStart, autoEnd;
@@ -153,9 +168,13 @@ struct timespec autoStart, autoEnd;
 
 //Control process thread exectution
 bool progRun;
+bool readyToStream;
+
 
 int main(int argc, const char* argv[])
 {
+
+	signal(SIGPIPE, SIG_IGN); // ignore sigpipes
 
 	//Read command line inputs to determine how the program will execute
 	ProgParams params;
@@ -174,7 +193,13 @@ int main(int argc, const char* argv[])
 	targets.hotLeftOrRight = 0;
 	progRun = false;
 
+
+	//start TCP Server
+	pthread_create(&TCPthread, NULL, TCP_thread, &params);
+
 	struct timespec start, end;
+
+	pthread_create(&MJPEG_S_Thread, NULL, MJPEG_Server_Thread, &params);
 
 	//run loop forever
 	while (true)
@@ -185,6 +210,8 @@ int main(int argc, const char* argv[])
 
 		if (params.Process && progRun)
 		{
+
+
 			//start clock to determine our processing time;
 			clock_gettime(CLOCK_REALTIME, &start);
 
@@ -200,7 +227,6 @@ int main(int argc, const char* argv[])
 				pthread_mutex_lock(&targetMutex);
 				findTarget(img, thresholded, targets, params);
 				CalculateDist(targets);
-
 				if(params.Debug)
 				{
 					cout<<"Vert: "<<targets.VertGoal<<endl;
@@ -214,6 +240,9 @@ int main(int argc, const char* argv[])
 
 				if(params.Timer)
 					cout << "It took " << diffClock(start,end) << " seconds to process frame \n";
+
+				if(params.FPS)
+					cout << "Processing at "  << 1/diffClock(start,end) << " FPS \n";
 
 
 			}
@@ -229,7 +258,13 @@ int main(int argc, const char* argv[])
 	}
 
 	//if we end the process code, wait for threads to end
+	pthread_join(TCPthread, NULL);
+	pthread_join(TCPsend, NULL);
+	pthread_join(TCPrecv, NULL);
+
 	pthread_join(MJPEG, NULL);
+	pthread_join(MJPEG_S_Thread, NULL);
+
 
 	//done
 	return 0;
@@ -249,15 +284,8 @@ int main(int argc, const char* argv[])
  */
 void CalculateDist(Target& targets)
 {
-	//vertical target is 32 inches fixed
-	double targetHeight = 32.0;
-
-	//get vertical pixels from targets
-	int height = targets.VerticalTarget.height;
-
 	//d = Tft*FOVpixel/(2*Tpixel*tanΘ)
-	targets.targetDistance = Y_IMAGE_RES * targetHeight
-			/ (height * 12 * 2 * tan(VIEW_ANGLE * PI / (180 * 2)));
+	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD));
 }
 
 /**
@@ -275,6 +303,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	vector<Vec4i> hierarchy;
 	vector<vector<Point> > contours;
 
+
+
 	//Find rectangles
 	findContours(thresholded, contours, hierarchy, RETR_EXTERNAL,
 			CHAIN_APPROX_SIMPLE);
@@ -286,7 +316,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	}
 
 	//run through all contours and remove small contours
-	unsigned int contourMin = 6;
+	unsigned int contourMin = 5;
 	for (vector<vector<Point> >::iterator it = contours.begin();
 			it != contours.end();)
 	{
@@ -304,7 +334,6 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 	/// Draw contours
 	Mat drawing = Mat::zeros(original.size(), CV_8UC3);
-
 	NullTargets(targets);
 
 	//run through large contours to see if they are our targerts
@@ -320,8 +349,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			{
 
 				//if(hierarchy[i][100] != -1)
-				//drawContours(original, contours, i, RED, 2, 8, hierarchy, 0,Point());
-
+				drawContours(original, contours, i, RED, 2, 8, hierarchy, 0,Point());
 				//draw a minimum box around the target in green
 				Point2f rect_points[4];
 				minRect[i].points(rect_points);
@@ -337,38 +365,40 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			//check if contour is vert, we use HWRatio because it is greater that 0 for vert target
 			if ((HWRatio > MinVRatio) && (HWRatio < MaxVRatio))
 			{
-				targets.VertGoal = true;
-				targets.VerticalTarget = box;
-				targets.VerticalAngle = minRect[i].angle;
-				targets.VerticalCenter = Point(box.x + box.width / 2,
-						box.y + box.height / 2);
-				targets.Vertical_H_W_Ratio = HWRatio;
-				targets.Vertical_W_H_Ratio = WHRatio;
+				targets.Target = box;
+//				targets.VertGoal = true;
+//				targets.VerticalTarget = box;
+//				targets.VerticalAngle = minRect[i].angle;
+//				targets.VerticalCenter = Point(box.x + box.width / 2,
+//						box.y + box.height / 2);
+//				targets.Vertical_H_W_Ratio = HWRatio;
+//				targets.Vertical_W_H_Ratio = WHRatio;
 
 			}
 			//check if contour is horiz, we use WHRatio because it is greater that 0 for vert target
 			else if ((WHRatio > MinHRatio) && (WHRatio < MaxHRatio))
 			{
-				targets.HorizGoal = true;
-				targets.HorizontalTarget = box;
-				targets.HorizontalAngle = minRect[i].angle;
-				targets.HorizontalCenter = Point(box.x + box.width / 2,
-						box.y + box.height / 2);
-				targets.Horizontal_H_W_Ratio = HWRatio;
-				targets.Horizontal_W_H_Ratio = WHRatio;
+				targets.Target = box;
+//				targets.HorizGoal = true;
+//				targets.HorizontalTarget = box;
+//				targets.HorizontalAngle = minRect[i].angle;
+//				targets.HorizontalCenter = Point(box.x + box.width / 2,
+//						box.y + box.height / 2);
+//				targets.Horizontal_H_W_Ratio = HWRatio;
+//				targets.Horizontal_W_H_Ratio = WHRatio;
 			}
 
 			if (targets.HorizGoal && targets.VertGoal)
 			{
-				targets.HotGoal = true;
-
-				//determine left or right
-				if (targets.VerticalCenter.x < targets.HorizontalCenter.x) //target is right
-					targets.targetLeftOrRight = 1;
-				else if (targets.VerticalCenter.x > targets.HorizontalCenter.x) //target is left
-					targets.targetLeftOrRight = -1;
-
-				targets.lastTargerLorR = targets.targetLeftOrRight;
+//				targets.HotGoal = true;
+//
+//				//determine left or right
+//				if (targets.VerticalCenter.x < targets.HorizontalCenter.x) //target is right
+//					targets.targetLeftOrRight = 1;
+//				else if (targets.VerticalCenter.x > targets.HorizontalCenter.x) //target is left
+//					targets.targetLeftOrRight = -1;
+//
+//				targets.lastTargerLorR = targets.targetLeftOrRight;
 
 			}
 
@@ -389,10 +419,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
 			line(original, center, center, YELLOW, 3);
 			line(original, Point(320/2, 240/2), Point(320/2, 240/2), YELLOW, 3);
-
 		}
-		//if(params.Visualize)
-			//imshow("Contours", original); //Make a rectangle that encompasses the target
+
 	}
 	else
 	{
@@ -400,8 +428,18 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		targets.targetLeftOrRight = 0;
 	}
 
+	//If there is contours, this will stream the contours over the original image, if there is no contours
+	//this will stream the camera feed. There will always be a stream
 	if(params.Visualize)
-				imshow("Contours", original); //Make a rectangle that encompasses the target
+	{
+		//lock mutex to store frame to a global variable, signal that new frame is ready
+		//and wake up any sleeping threads
+		pthread_mutex_lock(&mjpegServerFrameMutex);
+		original.copyTo(imgToStream);
+		pthread_cond_signal(&newFrameToStreamSignal);
+		pthread_mutex_unlock(&mjpegServerFrameMutex);
+		//imshow("Contours", original); //Make a rectangle that encompasses the target
+	}
 
 	pthread_mutex_lock(&matchStartMutex);
 	if (!targets.matchStart)
@@ -469,6 +507,7 @@ void initializeParams(ProgParams& params)
 	params.Visualize = false;
 	params.Process = true;
 	params.USB_Cam = false;
+	params.FPS = false;
 
 }
 
@@ -544,6 +583,10 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 			{
 				params.Debug = true;
 			}
+			else if (string(argv[i]) == "-FPS") //Enable FPS output
+			{
+				params.FPS = true;
+			}
 			else if (string(argv[i]) == "-d") //Default Params
 			{
 				params.ROBOT_PORT = string(argv[i + 1]);
@@ -567,7 +610,203 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 
 	}
 }
+/**
+ * This function either gets an image from the camera
+ * loads from a file
+ *
+ * The condition is determined by variables within the
+ * program struct.
+ *
+ * The image returned is then used for processing.
+ *
+ * THIS FUNCTION IS OBSOLTETE AND HAS BEEN REPLACED
+ * BY AN FFMPEG STREAM FUNCTION
+ */
+Mat GetOriginalImage(const ProgParams& params)
+{
+	Mat img;
 
+	if (params.From_Camera)
+	{
+
+		system("wget -q http://10.21.68.90/jpg/image.jpg -O capturedImage.jpg");
+
+		//load downloaded image
+		img = imread("capturedImage.jpg");
+
+	}
+	else if (params.From_File)
+	{
+		//load image from file
+		img = imread(params.IMAGE_FILE);
+	}
+
+	return img;
+}
+
+void error(const char *msg)
+{
+	perror(msg);
+	exit(0);
+}
+
+double diffClock(timespec start, timespec end)
+{
+ return	(end.tv_sec - start.tv_sec) + (double) (end.tv_nsec - start.tv_nsec)/ 1000000000.0f;
+}
+
+/**
+ * This function creates a TCP stream between the cRIO and the
+ * beaglebone.
+ *
+ * Once the stream is established it will automatically
+ * create two new threads, one to send a predetermined message
+ * to the cRIO, and another to receive a predetermined message
+ * from the cRIO.
+ */
+
+void *TCP_thread(void *args)
+{
+	ProgParams *struct_ptr = (ProgParams *) args;
+
+	string ip = struct_ptr->ROBOT_IP;
+	int port = atoi(struct_ptr->ROBOT_PORT.c_str());
+
+	//string ip = "10.21.68.2";
+	//int port = 1111;
+
+	std::cout<<"Trying to connect to Robot Server... at: "<<ip<<":"<<port<<std::endl;
+
+	//connect to host
+	client.conn(ip, port);
+
+	//create thread to send messages
+	pthread_create(&TCPsend, NULL, TCP_Send_Thread, NULL);
+
+	//create thread to recv messages
+	pthread_create(&TCPrecv, NULL, TCP_Recv_Thread, NULL);
+
+	/* the function must return something - NULL will do */
+	return NULL;
+
+}
+
+/**
+ * This function sends data to the cRIO over TCP.
+ *
+ * This function assumes the TCP stream has already been created.
+ *
+ * Currently the only data we receive from the CRIO is match start
+ * boolean which allows us to detrmine the time autonomous starts.
+ *
+ * This function should be ran it its own thread. It uses a sleep
+ * function to pause execution.
+ */
+
+void *TCP_Send_Thread(void *args)
+{
+	int count = 0;
+	while (true)
+	{
+		//Create a string which has following information
+		//MatchStart, HotGoal, Distance, message #
+
+		pthread_mutex_lock(&targetMutex);
+		pthread_mutex_lock(&matchStartMutex);
+		stringstream message;
+
+		//create string stream message;
+		message << targets.matchStart << ","<< targets.validFrame << "," << targets.HotGoal << ","
+				<< targets.cameraConnected << "," << progRun << ","<< targets.hotLeftOrRight << ","
+				<< targets.targetDistance << "," << count << "\n";
+
+		//send message over pipe
+		client.send_data(message.str());
+		pthread_mutex_unlock(&matchStartMutex);
+		pthread_mutex_unlock(&targetMutex);
+
+		count++;
+		usleep(50000); //  run ~20 times a second
+
+	}
+
+	return NULL;
+
+}
+
+/**
+ * This function captures data from the cRIO over TCP and saves it in a
+ * variable.
+ *
+ * NOTE: THIS FUNCTION BLOCKS WAITING FOR DATA ON THE PIPE TO BE
+ * RECEIVED. IF YOU PASS IT A MUTABLE LOCK, IT WILL BLOCK ON
+ * THAT LOCK UNTIL A /n CHARACTER IS RECEIVED. POSSIBLY BLOCKING
+ * ANY OTHER THREAD USING THAT LOCK.
+ *
+ * YOU CAN AVOID THIS BY MAKING SURE THE CRIO PASSES DATA TO THE BONE
+ * FASTER OR AS FAST AS THIS FUNCTION LOOPS.
+ *
+ * ALSO BE CAREFUL WHAT MUTABLE LOCKS ARE USED.
+ *
+ * This function assumes the TCP stream has already been created.
+ *
+ * Currently the only data we receive from the CRIO is match start
+ * boolean which allows us to determine the time autonomous starts.
+ *
+ * This function should be ran it its own thread. It uses a sleep
+ * function to pause execution.
+ */
+
+void *TCP_Recv_Thread(void *args)
+{
+	int count1 = 0;
+	int count2 = 0;
+	struct timespec end;
+
+	while (true)
+	{
+		//Set Match State, should be single int
+//		pthread_mutex_lock(&matchStartMutex);
+		targets.matchStart = atoi(client.receive(5).c_str());
+
+		if(!targets.matchStart)
+		{
+			count1=0;
+			count2=0;
+			targets.validFrame = false;
+
+		}
+
+		//once the match starts, we start a timer and run it in
+		//a new thread, we use a count variable so we only run this once
+		if(targets.matchStart && count1==0)
+		{
+			clock_gettime(CLOCK_REALTIME, &autoStart);
+			count1++;
+			pthread_create(&AutoCounter, NULL, HotGoalCounter, args);
+		}
+
+
+		clock_gettime(CLOCK_REALTIME, &end);
+
+		//Only set validFrame after we wait a certain amount of time, and after
+		//process thread starts
+		if(targets.matchStart && diffClock(autoStart,end)>=AUTO_STEADY_STATE && progRun && count2==0 )
+		{
+			targets.validFrame = true;
+			count2++;
+		}
+
+
+//		pthread_mutex_unlock(&matchStartMutex);
+
+		usleep(20000); // run 5 times a second
+
+	}
+
+	return NULL;
+
+}
 
 /**
  * This function uses FFMPEG codec apart of openCV to open a
@@ -597,16 +836,8 @@ void *VideoCap(void *args)
 		frame = imread(struct_ptr->IMAGE_FILE);
 		pthread_mutex_unlock(&frameMutex);
 
-		if (!frame.empty())
-		{
-			cout<<"File Loaded: Starting Processing Thread"<<endl;
-			progRun = true;
-		}
-		else
-		{
-			cout<<"Error Loading File"<<endl;
-			exit(0);
-		}
+		cout<<"File Loaded: Starting Processing Thread"<<endl;
+		progRun = true;
 
 
 	}
@@ -644,6 +875,7 @@ void *VideoCap(void *args)
 			//Camera must be able to support specified framesize and frames per second
 			//or this will set camera to defaults
 			while (!vcap.open(videoStreamAddress, 320,240,7.5))
+			//while (!vcap.open(videoStreamAddress))
 			{
 				std::cout << "Error connecting to camera stream, retrying " << count<< std::endl;
 				count++;
@@ -654,7 +886,7 @@ void *VideoCap(void *args)
 			//all opencv v4l2 camera controls scale from 0.0 - 1.0
 
 			//vcap.set(CV_CAP_PROP_EXPOSURE_AUTO, 1);
-			vcap.set(CV_CAP_PROP_EXPOSURE_ABSOLUTE, 0.1);
+			//vcap.set(CV_CAP_PROP_EXPOSURE_ABSOLUTE, 0.1);
 			vcap.set(CV_CAP_PROP_BRIGHTNESS, 1);
 			vcap.set(CV_CAP_PROP_CONTRAST, 0);
 
@@ -744,10 +976,55 @@ void *VideoCap(void *args)
 	return NULL;
 }
 
-/*
- * This function prints the command line usage of this
- * program to the std output
- */
+void *HotGoalCounter(void *args)
+{
+
+	//If this method started, then the match started
+
+
+	while (true)
+	{
+		clock_gettime(CLOCK_REALTIME, &autoEnd);
+		double timeNow = diffClock(autoStart,autoEnd);
+		if(timeNow<5)
+		{
+			pthread_mutex_lock(&targetMutex);
+			if(targets.targetLeftOrRight == 0)
+				targets.hotLeftOrRight = targets.lastTargerLorR * -1;
+			else
+				targets.hotLeftOrRight = targets.targetLeftOrRight;
+			pthread_mutex_unlock(&targetMutex);
+
+			cout<<"this side hot"<<endl;
+		}
+		else if(timeNow<10)
+		{
+			//Auto has been running for 5 seconds, so the other side is hot
+			//we update the variable to switch to other side
+			pthread_mutex_lock(&targetMutex);
+			targets.hotLeftOrRight = targets.hotLeftOrRight * -1;
+			pthread_mutex_unlock(&targetMutex);
+
+			cout<<"otherside hot"<<endl;
+		}
+		else if (timeNow >= 10)
+		{
+			//Auto is over, no more hot targets, end thread
+			pthread_mutex_lock(&targetMutex);
+			targets.hotLeftOrRight = 0;
+			pthread_mutex_unlock(&targetMutex);
+			cout<<"auto over"<<endl;
+			break;
+		}
+
+		usleep(50000); // run 10 times a second
+
+	}
+
+	return NULL;
+
+}
+
 void printCommandLineUsage()
 {
 	cout<<"Usage: 2168_Vision  [Input]  [Options] \n\n";
@@ -796,23 +1073,45 @@ void printCommandLineUsage()
 
 }
 
-/*
- * Error Functions
- * - Not Used -
- */
-void error(const char *msg)
+void *MJPEG_Server_Thread(void *args)
 {
-	perror(msg);
-	exit(0);
+
+	if (mjpeg_s.initMJPEGServer(8001))
+		cout << "Initalized MJPEG Server" << endl;
+
+	//listen for incoming connection, blocks until a client connections
+	mjpeg_s.host(args);
+
+	//once connected, we start streaming data
+	pthread_create(&MJPEGHost, NULL, MJPEG_host, args);
+	pthread_detach(MJPEGHost);
+	return NULL;
+
 }
 
-/*
- * Calculate real clock difference
- */
-double diffClock(timespec start, timespec end)
+void *MJPEG_host(void *args)
 {
- return	(end.tv_sec - start.tv_sec) + (double) (end.tv_nsec - start.tv_nsec)/ 1000000000.0f;
+
+
+	while (true)
+	{
+		//locks on each mpeg frame, and waits until a new frame is needed
+		//this loop doesn't need a sleep, because the signal handler will
+		//put it to sleep and only wake it up when a new frame is ready
+		//this method will only serve a new image, instead of serving a single
+		//image multiple times.
+		pthread_mutex_lock(&mjpegServerFrameMutex);
+		pthread_cond_wait(&newFrameToStreamSignal, &mjpegServerFrameMutex);
+		if (!mjpeg_s.setImageToHost(imgToStream))
+		{
+			//send fail so give up mutex lock and restart mjpeg server
+			pthread_mutex_unlock(&mjpegServerFrameMutex);
+			mjpeg_s.host(NULL);
+		}
+		pthread_mutex_unlock(&mjpegServerFrameMutex);
+
+	}
+
+	return NULL;
+
 }
-
-
-

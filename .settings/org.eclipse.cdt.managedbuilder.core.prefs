@@ -1,0 +1,14 @@
+eclipse.preferences.version=1
+environment/buildEnvironmentInclude/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/CPATH/delimiter=\:
+environment/buildEnvironmentInclude/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/CPATH/operation=remove
+environment/buildEnvironmentInclude/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/CPLUS_INCLUDE_PATH/delimiter=\:
+environment/buildEnvironmentInclude/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/CPLUS_INCLUDE_PATH/operation=remove
+environment/buildEnvironmentInclude/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/C_INCLUDE_PATH/delimiter=\:
+environment/buildEnvironmentInclude/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/C_INCLUDE_PATH/operation=remove
+environment/buildEnvironmentInclude/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/append=true
+environment/buildEnvironmentInclude/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/appendContributed=true
+environment/buildEnvironmentLibrary/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/LIBRARY_PATH/delimiter=\:
+environment/buildEnvironmentLibrary/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/LIBRARY_PATH/operation=replace
+environment/buildEnvironmentLibrary/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/LIBRARY_PATH/value=/usr/lib/gcc/arm-linux-gnueabi/4.6/\:/usr/lib/gcc/arm-linux-gnueabi/4.6/../../../../arm-linux-gnueabi/lib/../lib/\:/usr/lib/gcc/arm-linux-gnueabi/4.6/../../../../arm-linux-gnueabi/lib/\:/home/vittorio/git/2168_Vision/_Libraries/softFP
+environment/buildEnvironmentLibrary/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/append=true
+environment/buildEnvironmentLibrary/cdt.managedbuild.config.gnu.exe.debug.287960576.47579162/appendContributed=true
