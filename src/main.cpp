@@ -116,11 +116,11 @@ const double PI = 3.141592653589793;
 
 //Thresholding parameters
 int minR = 0;
-int maxR = 50;
-int minG = 200; //160 for ip cam, 80 to support MS webcam
+int maxR = 30;
+int minG = 30; //160 for ip cam, 80 to support MS webcam
 int maxG = 255;
-int minB = 200;
-int maxB = 255;
+int minB = 0;
+int maxB = 30;
 
 //Target Ratio Ranges
 double MinHRatio = 1.0;
@@ -765,9 +765,10 @@ void *TCP_Send_Thread(void *args)
 		stringstream message;
 
 		//create string stream message;
-		message << targets.matchStart << ","<< targets.validFrame << "," << targets.HotGoal << ","
-				<< targets.cameraConnected << "," << progRun << ","<< targets.hotLeftOrRight << ","
-				<< targets.targetDistance << "," << count << "\n";
+		message << targets.matchStart << ","<< targets.TargetBearing << ","<< targets.targetDistance <<"\n";
+//		message << targets.matchStart << ","<< targets.validFrame << "," << targets.HotGoal << ","
+//				<< targets.cameraConnected << "," << progRun << ","<< targets.hotLeftOrRight << ","
+//				<< targets.targetDistance << "," << count << "\n";
 
 		//send message over pipe
 		client.send_data(message.str());
