@@ -100,7 +100,8 @@ bool tcp_client::send_data(string data)
     //Send some data
     if( send(sock , data.c_str() , strlen( data.c_str() ) , 0) < 0)
     {
-        perror("Send failed : ");
+        perror("Send failed : Client may have broken connection");
+    	sock = -1;
         return false;
     }
 

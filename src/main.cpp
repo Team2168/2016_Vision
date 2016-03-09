@@ -10,6 +10,7 @@
 #define CAMERA_WIDTH_FOV_ANGLE_RAD 0.743879868
 #define ROBOT_ANGLE_OFFSET 0.0
 
+#define MJPEG_SERVER_PORT 8001
 
 #include "mjpeg_server.h"
 #include <unistd.h>
@@ -50,37 +51,27 @@ struct ProgParams
 //Stuct to hold information about targets found
 struct Target
 {
-	Rect HorizontalTarget;
-	Rect VerticalTarget;
 
 	Rect Target;
-	double TargetBearing;
-	double TargetBoxAngle;
-
-
-	double HorizontalAngle;
-	double VerticalAngle;
-	double Horizontal_W_H_Ratio;
-	double Horizontal_H_W_Ratio;
-	double Vertical_W_H_Ratio;
-	double Vertical_H_W_Ratio;
-
-	Point HorizontalCenter;
-	Point VerticalCenter;
-
-	bool HorizGoal;
-	bool VertGoal;
-	bool HotGoal;
-	bool matchStart;
-	bool validFrame;
 
 	//camera bool
 	bool cameraConnected;
 
-	int targetLeftOrRight;
-	int lastTargerLorR;
-	int hotLeftOrRight;
+	//Dist and Angle
+	double TargetBoxAngle;
+	double TargetBearing;
 	double targetDistance;
+
+	//Valild match
+	bool matchStart;
+	bool validFrame;
+
+
+	int numberOfContoursDetected;
+
+	bool isTargetScoreable;
+	bool isPrecessThreadRunning;
+	bool isMjpegClientConnected;
 
 };
 
@@ -108,8 +99,6 @@ void *MJPEG_host(void *args);
 //Threaded Video Capture Function
 void *VideoCap(void *args);
 
-//Threaded Counter Function
-void *HotGoalCounter(void *args);
 
 //GLOBAL CONSTANTS
 const double PI = 3.141592653589793;
@@ -196,8 +185,8 @@ int main(int argc, const char* argv[])
 
 	//initialize variables so processing loop is false;
 	targets.matchStart = false;
+	targets.cameraConnected = false;
 	targets.validFrame = false;
-	targets.hotLeftOrRight = 0;
 	progRun = false;
 
 
@@ -233,8 +222,6 @@ int main(int argc, const char* argv[])
 				//Lock Targets and determine goals
 				pthread_mutex_lock(&targetMutex);
 				findTarget(img, thresholded, targets, params);
-				CalculateDist(targets);
-				CalculateBearing(targets);
 
 				if(params.Debug)
 				{
@@ -412,19 +399,6 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 //				targets.Horizontal_W_H_Ratio = WHRatio;
 			}
 
-			if (targets.HorizGoal && targets.VertGoal)
-			{
-//				targets.HotGoal = true;
-//
-//				//determine left or right
-//				if (targets.VerticalCenter.x < targets.HorizontalCenter.x) //target is right
-//					targets.targetLeftOrRight = 1;
-//				else if (targets.VerticalCenter.x > targets.HorizontalCenter.x) //target is left
-//					targets.targetLeftOrRight = -1;
-//
-//				targets.lastTargerLorR = targets.targetLeftOrRight;
-
-			}
 
 			if(params.Debug)
 			{
@@ -468,13 +442,15 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 
 		}
+		
+		//TODO: Add is Target Scorable, angle offset is correct, pick largest box
 
 
 	}
 	else
 	{
-		cout << "No Contours" << endl;
-		targets.targetLeftOrRight = 0;
+		targets.isTargetScoreable = false;
+		targets.numberOfContoursDetected = 0;
 	}
 
 	//If there is contours, this will stream the contours over the original image, if there is no contours
@@ -492,7 +468,10 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 	pthread_mutex_lock(&matchStartMutex);
 	if (!targets.matchStart)
-		targets.hotLeftOrRight = targets.targetLeftOrRight;
+		{
+		//TODO Write function to determine if target is scorable
+		//targets.isTargetScoreable = true;
+	}
 	pthread_mutex_unlock(&matchStartMutex);
 
 }
@@ -532,19 +511,25 @@ Mat ThresholdImage(Mat original)
 void NullTargets(Target& target)
 {
 
-	target.HorizontalAngle = 0.0;
-	target.VerticalAngle = 0.0;
-	target.Horizontal_W_H_Ratio = 0.0;
-	target.Horizontal_H_W_Ratio = 0.0;
-	target.Vertical_W_H_Ratio = 0.0;
-	target.Vertical_H_W_Ratio = 0.0;
-	target.targetDistance = 0.0;
-	target.targetLeftOrRight = 0;
-	target.lastTargerLorR = 0;
+//	target.HorizontalAngle = 0.0;
+//	target.VerticalAngle = 0.0;
+//	target.Horizontal_W_H_Ratio = 0.0;
+//	target.Horizontal_H_W_Ratio = 0.0;
+//	target.Vertical_W_H_Ratio = 0.0;
+//	target.Vertical_H_W_Ratio = 0.0;
+//	target.targetLeftOrRight = 0;
+//	target.lastTargerLorR = 0;
+//
+//	target.HorizGoal = false;
+//	target.VertGoal = false;
+//	target.HotGoal = false;
 
-	target.HorizGoal = false;
-	target.VertGoal = false;
-	target.HotGoal = false;
+	target.targetDistance = 0.0;
+	target.TargetBoxAngle = 0.0;
+	target.numberOfContoursDetected = 0;
+	target.TargetBearing = 0.0;
+
+	target.isTargetScoreable = false;
 
 }
 void initializeParams(ProgParams& params)
@@ -559,6 +544,7 @@ void initializeParams(ProgParams& params)
 	params.FPS = false;
 
 }
+
 
 /**
  * This function parses the command line inputs and determines
@@ -755,6 +741,9 @@ void *TCP_thread(void *args)
 void *TCP_Send_Thread(void *args)
 {
 	int count = 0;
+
+	ProgParams *struct_ptr = (ProgParams *) args;
+
 	while (true)
 	{
 		//Create a string which has following information
@@ -765,20 +754,36 @@ void *TCP_Send_Thread(void *args)
 		stringstream message;
 
 		//create string stream message;
-		message << targets.matchStart << ","<< targets.TargetBearing << ","<< targets.targetDistance <<"\n";
-//		message << targets.matchStart << ","<< targets.validFrame << "," << targets.HotGoal << ","
-//				<< targets.cameraConnected << "," << progRun << ","<< targets.hotLeftOrRight << ","
-//				<< targets.targetDistance << "," << count << "\n";
+		//message << "1," << targets.TargetBearing << "," <<
+		//		targets.targetDistance << endl;
+
+		//[isMatchStarted,numberOfContours,distanceToContour,angleToContour,isTargetScoreable,isProcessThreadRunning,isCameraConnected,isMjpegClientConnected]
+		message << targets.matchStart << "," <<
+				targets.TargetBearing << "," <<
+				targets.targetDistance << "," <<
+				targets.numberOfContoursDetected << "," <<
+				targets.isTargetScoreable << "," <<
+				targets.isPrecessThreadRunning << "," <<
+				targets.cameraConnected << "," <<
+				targets.isMjpegClientConnected << endl;
 
 		//send message over pipe
-		client.send_data(message.str());
+		bool successfull = client.send_data(message.str());
 		pthread_mutex_unlock(&matchStartMutex);
 		pthread_mutex_unlock(&targetMutex);
+
+		if (!successfull)
+			break;
 
 		count++;
 		usleep(50000); //  run ~20 times a second
 
 	}
+
+	pthread_cancel(TCPrecv);
+
+	//start TCP Server
+	pthread_create(&TCPthread, NULL, TCP_thread, struct_ptr);
 
 	return NULL;
 
@@ -829,12 +834,12 @@ void *TCP_Recv_Thread(void *args)
 
 		//once the match starts, we start a timer and run it in
 		//a new thread, we use a count variable so we only run this once
-		if(targets.matchStart && count1==0)
-		{
-			clock_gettime(CLOCK_REALTIME, &autoStart);
-			count1++;
-			pthread_create(&AutoCounter, NULL, HotGoalCounter, args);
-		}
+//		if(targets.matchStart && count1==0)
+//		{
+//			clock_gettime(CLOCK_REALTIME, &autoStart);
+//			count1++;
+//			pthread_create(&AutoCounter, NULL, HotGoalCounter, args);
+//		}
 
 
 		clock_gettime(CLOCK_REALTIME, &end);
@@ -1026,54 +1031,54 @@ void *VideoCap(void *args)
 	return NULL;
 }
 
-void *HotGoalCounter(void *args)
-{
-
-	//If this method started, then the match started
-
-
-	while (true)
-	{
-		clock_gettime(CLOCK_REALTIME, &autoEnd);
-		double timeNow = diffClock(autoStart,autoEnd);
-		if(timeNow<5)
-		{
-			pthread_mutex_lock(&targetMutex);
-			if(targets.targetLeftOrRight == 0)
-				targets.hotLeftOrRight = targets.lastTargerLorR * -1;
-			else
-				targets.hotLeftOrRight = targets.targetLeftOrRight;
-			pthread_mutex_unlock(&targetMutex);
-
-			cout<<"this side hot"<<endl;
-		}
-		else if(timeNow<10)
-		{
-			//Auto has been running for 5 seconds, so the other side is hot
-			//we update the variable to switch to other side
-			pthread_mutex_lock(&targetMutex);
-			targets.hotLeftOrRight = targets.hotLeftOrRight * -1;
-			pthread_mutex_unlock(&targetMutex);
-
-			cout<<"otherside hot"<<endl;
-		}
-		else if (timeNow >= 10)
-		{
-			//Auto is over, no more hot targets, end thread
-			pthread_mutex_lock(&targetMutex);
-			targets.hotLeftOrRight = 0;
-			pthread_mutex_unlock(&targetMutex);
-			cout<<"auto over"<<endl;
-			break;
-		}
-
-		usleep(50000); // run 10 times a second
-
-	}
-
-	return NULL;
-
-}
+//void *HotGoalCounter(void *args)
+//{
+//
+//	//If this method started, then the match started
+//
+//
+//	while (true)
+//	{
+//		clock_gettime(CLOCK_REALTIME, &autoEnd);
+//		double timeNow = diffClock(autoStart,autoEnd);
+//		if(timeNow<5)
+//		{
+//			pthread_mutex_lock(&targetMutex);
+//			if(targets.targetLeftOrRight == 0)
+//				targets.hotLeftOrRight = targets.lastTargerLorR * -1;
+//			else
+//				targets.hotLeftOrRight = targets.targetLeftOrRight;
+//			pthread_mutex_unlock(&targetMutex);
+//
+//			cout<<"this side hot"<<endl;
+//		}
+//		else if(timeNow<10)
+//		{
+//			//Auto has been running for 5 seconds, so the other side is hot
+//			//we update the variable to switch to other side
+//			pthread_mutex_lock(&targetMutex);
+//			targets.hotLeftOrRight = targets.hotLeftOrRight * -1;
+//			pthread_mutex_unlock(&targetMutex);
+//
+//			cout<<"otherside hot"<<endl;
+//		}
+//		else if (timeNow >= 10)
+//		{
+//			//Auto is over, no more hot targets, end thread
+//			pthread_mutex_lock(&targetMutex);
+//			targets.hotLeftOrRight = 0;
+//			pthread_mutex_unlock(&targetMutex);
+//			cout<<"auto over"<<endl;
+//			break;
+//		}
+//
+//		usleep(50000); // run 10 times a second
+//
+//	}
+//
+//	return NULL;
+//
+//}
 
 void printCommandLineUsage()
 {
@@ -1126,8 +1131,11 @@ void printCommandLineUsage()
 void *MJPEG_Server_Thread(void *args)
 {
 
-	if (mjpeg_s.initMJPEGServer(8001))
+	if (mjpeg_s.initMJPEGServer(MJPEG_SERVER_PORT))
+	{
 		cout << "Initalized MJPEG Server" << endl;
+		cout << "MJPEG Server Port: " << MJPEG_SERVER_PORT << endl;
+	}
 
 	//listen for incoming connection, blocks until a client connections
 	mjpeg_s.host(args);
