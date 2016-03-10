@@ -105,11 +105,11 @@ const double PI = 3.141592653589793;
 
 //Thresholding parameters
 int minR = 0;
-int maxR = 30;
-int minG = 30; //160 for ip cam, 80 to support MS webcam
+int maxR = 120;
+int minG = 150; //160 for ip cam, 80 to support MS webcam
 int maxG = 255;
-int minB = 0;
-int maxB = 30;
+int minB = 40;
+int maxB = 255;
 
 //Target Ratio Ranges
 double MinHRatio = 1.0;
@@ -315,7 +315,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 
 
-	//Find rectangles
+	//Find close contours
 	findContours(thresholded, contours, hierarchy, RETR_EXTERNAL,
 			CHAIN_APPROX_SIMPLE);
 
@@ -325,13 +325,32 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	cout << "Hierarchy: " << hierarchy.size() << endl;
 	}
 
+
+
+	double MAX_CONTOUR_SIZE =0;
 	//run through all contours and remove small contours
-	unsigned int contourMin = 5;
+	unsigned int contourMin = 25;
+
+	//find largest contour
 	for (vector<vector<Point> >::iterator it = contours.begin();
 			it != contours.end();)
 	{
+
 		//cout<<"Contour Size: "<<it->size()<<endl;
-		if (it->size() < contourMin)
+		if (it->size() > MAX_CONTOUR_SIZE)
+			MAX_CONTOUR_SIZE = it->size();
+		else
+			++it;
+
+	}
+
+	//delete everything but largest contour
+	for (vector<vector<Point> >::iterator it = contours.begin();
+			it != contours.end();)
+	{
+
+		//cout<<"Contour Size: "<<it->size()<<endl;
+		if (it->size() < MAX_CONTOUR_SIZE)
 			it = contours.erase(it);
 
 		else
