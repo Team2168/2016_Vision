@@ -106,9 +106,9 @@ const double PI = 3.141592653589793;
 //Thresholding parameters
 int minR = 0;
 int maxR = 120;
-int minG = 150; //160 for ip cam, 80 to support MS webcam
+int minG = 180; //160 for ip cam, 80 to support MS webcam
 int maxG = 255;
-int minB = 40;
+int minB = 80;
 int maxB = 255;
 
 //Target Ratio Ranges
@@ -325,24 +325,25 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	cout << "Hierarchy: " << hierarchy.size() << endl;
 	}
 
-
-
-	double MAX_CONTOUR_SIZE =0;
-	//run through all contours and remove small contours
-	unsigned int contourMin = 25;
-
-	//find largest contour
-	for (vector<vector<Point> >::iterator it = contours.begin();
-			it != contours.end();)
+	int largestIndex = 0;
+	unsigned int largestContour = 0;
+	int secondLargestIndex = 0;
+	unsigned int secondLargestContour = 0;
+	for( unsigned int i = 0; i< contours.size(); i++ )
 	{
-
-		//cout<<"Contour Size: "<<it->size()<<endl;
-		if (it->size() > MAX_CONTOUR_SIZE)
-			MAX_CONTOUR_SIZE = it->size();
-		else
-			++it;
-
+	    if(contours[i].size() > largestContour){
+	        secondLargestContour = largestContour;
+	        secondLargestIndex = largestIndex;
+	        largestContour = contours[i].size();
+	        largestIndex = i;
+	    }else if(contours[i].size() > secondLargestContour){
+	        secondLargestContour = contours[i].size();
+	        secondLargestIndex = i;
+	    }
 	}
+
+
+	cout<<"Max 1 Contour: "<< largestContour << ", Max 2 Contour: " << secondLargestContour <<endl;
 
 	//delete everything but largest contour
 	for (vector<vector<Point> >::iterator it = contours.begin();
@@ -350,13 +351,62 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	{
 
 		//cout<<"Contour Size: "<<it->size()<<endl;
-		if (it->size() < MAX_CONTOUR_SIZE)
+		if (it->size() < secondLargestContour && contours.size() > 2)
 			it = contours.erase(it);
-
 		else
 			++it;
 
 	}
+
+
+//	Scalar color = Scalar(0,0,255);
+//	drawContours( drawing, contours, largestIndex, color, CV_FILLED, 8);
+//	drawContours( drawing, contours, secondLargestIndex, color, CV_FILLED, 8);
+
+
+
+//	double MAX_CONTOUR_SIZE =0;
+//	//run through all contours and remove small contours
+//	unsigned int contourMin = 25;
+//
+//	double MAX_CONTOUR_SIZE_1 =0;
+//		double MAX_CONTOUR_SIZE_2 = 0;
+//		double MIN_ANGLE_SIZE = 1000;
+//		//run through all contours and remove small contours
+//
+//
+//
+//	if(contours.size()>2)
+//	{
+//	for (vector<vector<Point> >::iterator it = contours.begin();
+//			it != contours.end(); ++it)
+//	{
+//
+//
+//
+////		//cout<<"Contour Size: "<<it->size()<<endl;
+////		if (it->size() > MAX_CONTOUR_SIZE)
+////			MAX_CONTOUR_SIZE = it->size();
+////		else
+////			++it;
+//
+//		if (it->size() >= MAX_CONTOUR_SIZE_1)
+//		{
+//				MAX_CONTOUR_SIZE_2 = MAX_CONTOUR_SIZE_1;
+//				MAX_CONTOUR_SIZE_1 = it->size();
+//
+//		}
+//		else if (it->size() >= MAX_CONTOUR_SIZE_2)
+//			MAX_CONTOUR_SIZE_2 = it->size();
+//
+//
+//	}
+//	cout<<"Max 1 Contour: "<< MAX_CONTOUR_SIZE_1 << ", Max 2 Contour: " << MAX_CONTOUR_SIZE_2 <<endl;
+//
+//
+
+//
+//	}
 
 	//Vector for Min Area Boxes
 	vector<RotatedRect> minRect(contours.size());
@@ -948,7 +998,7 @@ void *VideoCap(void *args)
 			//We specify desired frame size and fps in constructor
 			//Camera must be able to support specified framesize and frames per second
 			//or this will set camera to defaults
-			while (!vcap.open(videoStreamAddress, 320,240,7.5))
+			while (!vcap.open(videoStreamAddress, 320,240,20))
 			//while (!vcap.open(videoStreamAddress))
 			{
 				std::cout << "Error connecting to camera stream, retrying " << count<< std::endl;
@@ -959,10 +1009,10 @@ void *VideoCap(void *args)
 			//After Opening Camera we need to configure the returned image setting
 			//all opencv v4l2 camera controls scale from 0.0 - 1.0
 
-			//vcap.set(CV_CAP_PROP_EXPOSURE_AUTO, 1);
-			//vcap.set(CV_CAP_PROP_EXPOSURE_ABSOLUTE, 0.1);
-			vcap.set(CV_CAP_PROP_BRIGHTNESS, 1);
-			vcap.set(CV_CAP_PROP_CONTRAST, 0);
+			vcap.set(CV_CAP_PROP_EXPOSURE_AUTO, 1);
+			vcap.set(CV_CAP_PROP_EXPOSURE_ABSOLUTE, 0.1);
+			vcap.set(CV_CAP_PROP_BRIGHTNESS, 0);
+			vcap.set(CV_CAP_PROP_CONTRAST, 0.5);
 
 			cout<<vcap.get(CV_CAP_PROP_FRAME_WIDTH)<<endl;
 			cout<<vcap.get(CV_CAP_PROP_FRAME_HEIGHT)<<endl;
