@@ -277,18 +277,25 @@ int main(int argc, const char* argv[])
  * pixel height of the image, and the view angle of the
  * camera lense.
  */
-void CalculateDist(Target& targets)
+double CalculateDist(double targetWidthPix)
 {
 	//d = Tft*FOVpixel/(2*Tpixel*tanΘ)
-	targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2.0 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD / 2.0));
+	//targets.targetDistance = (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targets.Target.width * 2.0 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD / 2.0));
+	return (TARGET_WIDTH_IN * FOV_WIDTH_PIX)/(targetWidthPix * 2.0 * tan(CAMERA_WIDTH_FOV_ANGLE_RAD / 2.0));
+
 }
 
-void CalculateBearing(Target& targets)
+double CalculateBearing(double targetXPix, double targetWidthPix)
 {
-	double x = targets.Target.x + (targets.Target.width / 2);
+//	double x = targets.Target.x + (targets.Target.width / 2);
+//	double x_target_on_FOV = ((2 * x) / (FOV_WIDTH_PIX)) - 1;
+//	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (-180 / PI) - ROBOT_ANGLE_OFFSET;
+//	targets.TargetBearing = bearing;
+
+	double x = targetXPix + (targetWidthPix / 2);
 	double x_target_on_FOV = ((2 * x) / (FOV_WIDTH_PIX)) - 1;
-	double bearing = ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (-180 / PI) - ROBOT_ANGLE_OFFSET;
-	targets.TargetBearing = bearing;
+	return ((x_target_on_FOV) * (CAMERA_WIDTH_FOV_ANGLE_RAD / 2)) * (-180 / PI) - ROBOT_ANGLE_OFFSET;
+
 }
 
 
@@ -310,8 +317,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 
 	//put cross hair on image
-	line(original, Point(FOV_WIDTH_PIX / 2, 0), Point(FOV_WIDTH_PIX/ 2, FOV_HEIGHT_PIX), GREEN, 2);
-	line(original, Point(0, FOV_HEIGHT_PIX / 2), Point(FOV_WIDTH_PIX, FOV_HEIGHT_PIX / 2), GREEN, 2);
+	line(original, Point(FOV_WIDTH_PIX / 2, 0), Point(FOV_WIDTH_PIX/ 2, FOV_HEIGHT_PIX), WHITE, 2);
+	line(original, Point(0, FOV_HEIGHT_PIX / 2), Point(FOV_WIDTH_PIX, FOV_HEIGHT_PIX / 2), WHITE, 2);
 
 
 
@@ -325,6 +332,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	cout << "Hierarchy: " << hierarchy.size() << endl;
 	}
 
+	//Find 2 largest contours
 	int largestIndex = 0;
 	unsigned int largestContour = 0;
 	int secondLargestIndex = 0;
@@ -342,10 +350,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	    }
 	}
 
-
-	cout<<"Max 1 Contour: "<< largestContour << ", Max 2 Contour: " << secondLargestContour <<endl;
-
-	//delete everything but largest contour
+	//delete everything but two largest contour
 	for (vector<vector<Point> >::iterator it = contours.begin();
 			it != contours.end();)
 	{
@@ -359,54 +364,12 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	}
 
 
-//	Scalar color = Scalar(0,0,255);
-//	drawContours( drawing, contours, largestIndex, color, CV_FILLED, 8);
-//	drawContours( drawing, contours, secondLargestIndex, color, CV_FILLED, 8);
+	if(params.Debug)
+	{
+	cout << "Contours after: " << contours.size() << endl;
+	cout << "Hierarchy after: " << hierarchy.size() << endl;
+	}
 
-
-
-//	double MAX_CONTOUR_SIZE =0;
-//	//run through all contours and remove small contours
-//	unsigned int contourMin = 25;
-//
-//	double MAX_CONTOUR_SIZE_1 =0;
-//		double MAX_CONTOUR_SIZE_2 = 0;
-//		double MIN_ANGLE_SIZE = 1000;
-//		//run through all contours and remove small contours
-//
-//
-//
-//	if(contours.size()>2)
-//	{
-//	for (vector<vector<Point> >::iterator it = contours.begin();
-//			it != contours.end(); ++it)
-//	{
-//
-//
-//
-////		//cout<<"Contour Size: "<<it->size()<<endl;
-////		if (it->size() > MAX_CONTOUR_SIZE)
-////			MAX_CONTOUR_SIZE = it->size();
-////		else
-////			++it;
-//
-//		if (it->size() >= MAX_CONTOUR_SIZE_1)
-//		{
-//				MAX_CONTOUR_SIZE_2 = MAX_CONTOUR_SIZE_1;
-//				MAX_CONTOUR_SIZE_1 = it->size();
-//
-//		}
-//		else if (it->size() >= MAX_CONTOUR_SIZE_2)
-//			MAX_CONTOUR_SIZE_2 = it->size();
-//
-//
-//	}
-//	cout<<"Max 1 Contour: "<< MAX_CONTOUR_SIZE_1 << ", Max 2 Contour: " << MAX_CONTOUR_SIZE_2 <<endl;
-//
-//
-
-//
-//	}
 
 	//Vector for Min Area Boxes
 	vector<RotatedRect> minRect(contours.size());
@@ -415,7 +378,10 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 	Mat drawing = Mat::zeros(original.size(), CV_8UC3);
 	NullTargets(targets);
 
-	//run through large contours to see if they are our targerts
+	double contour0Score =0;
+	double contour1Score = 0;
+
+	//run through 2 large contours to grade them to get BEST target
 	if (!contours.empty() && !hierarchy.empty())
 	{
 
@@ -437,37 +403,80 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			}
 			//define minAreaBox
 			Rect box = minRect[i].boundingRect();
-			targets.TargetBoxAngle = minRect[i].angle;
+			//targets.TargetBoxAngle = minRect[i].angle;
 
 			double WHRatio = box.width / ((double) box.height);
 			double HWRatio = ((double) box.height) / box.width;
 
-			//check if contour is vert, we use HWRatio because it is greater that 0 for vert target
-			if ((HWRatio > MinVRatio) && (HWRatio < MaxVRatio))
-			{
-				targets.Target = box;
-//				targets.VertGoal = true;
-//				targets.VerticalTarget = box;
-//				targets.VerticalAngle = minRect[i].angle;
-//				targets.VerticalCenter = Point(box.x + box.width / 2,
-//						box.y + box.height / 2);
-//				targets.Vertical_H_W_Ratio = HWRatio;
-//				targets.Vertical_W_H_Ratio = WHRatio;
+			//calculate distance and target to each target
+			double dist = CalculateDist(box.width);
+			double bearing = CalculateBearing(box.x,box.width);
 
-			}
-			//check if contour is horiz, we use WHRatio because it is greater that 0 for vert target
-			else if ((WHRatio > MinHRatio) && (WHRatio < MaxHRatio))
-			{
-				targets.Target = box;
-//				targets.HorizGoal = true;
-//				targets.HorizontalTarget = box;
-//				targets.HorizontalAngle = minRect[i].angle;
-//				targets.HorizontalCenter = Point(box.x + box.width / 2,
-//						box.y + box.height / 2);
-//				targets.Horizontal_H_W_Ratio = HWRatio;
-//				targets.Horizontal_W_H_Ratio = WHRatio;
-			}
+			//ID the center in yellow
+			Point center(box.x + box.width / 2, box.y + box.height / 2);
+			line(original, center, center, YELLOW, 3);
+			ostringstream output;
 
+			output << "Dist: " << dist;
+			putText(original, output.str(), Point(center.x + 10, center.y), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+			output.str("");
+			output.clear();
+			output << "Bearing: " << bearing;
+			putText(original, output.str(), Point(center.x + 10, center.y + 15), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+			output.str("");
+			output.clear();
+			output << "Width: " << box.width;
+			putText(original, output.str(), Point(center.x + 10, center.y + 30), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+			output.str("");
+			output.clear();
+			output << "Angle: " << minRect[i].angle;
+			putText(original, output.str(), Point(center.x + 10, center.y + 45), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+
+			const int WEIGHT = 25;
+			double angleGrade, WHRatioGrade, distGrade, bearingGrade;
+
+			//0 if angle > 60,
+			if (abs(minRect[i].angle) > 60)
+				angleGrade = 0;
+			else
+				angleGrade = WEIGHT - (WEIGHT* abs(minRect[i].angle) / 60);
+
+
+			if (WHRatio > 2 || HWRatio > 2)
+				WHRatioGrade =0;
+			else
+				WHRatioGrade = WEIGHT - (WEIGHT*abs(WHRatio-1.4)/1.4);
+
+			if (dist > 200 || dist<=0)
+				distGrade =0;
+			else
+				distGrade = WEIGHT - (WEIGHT* abs(dist-160) / 160);
+
+			bearingGrade = WEIGHT - abs(bearing);
+
+
+			if(angleGrade<0)
+				angleGrade = 0;
+
+			if(WHRatioGrade < 0 )
+				WHRatioGrade = 0;
+
+			if(distGrade < 0)
+				distGrade =0;
+
+			if(bearingGrade < 0)
+				bearingGrade = 0;
+
+			double score = angleGrade+WHRatioGrade+distGrade+bearingGrade;
+
+			if(i==0)
+				contour0Score=score;
+			else
+				contour1Score=score;
 
 			if(params.Debug)
 			{
@@ -480,37 +489,81 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 				cout<<"\tRatio (W/H): "<<WHRatio<<endl;
 				cout<<"\tRatio (H/W): "<<HWRatio<<endl;
 				cout<<"\tArea: "<<box.height*box.width<<endl;
+
+				cout<<"\tangleGrade: "<<angleGrade<<endl;
+				cout<<"\tratioGrade: "<<WHRatioGrade<<endl;
+				cout<<"\tdistGrade: "<<distGrade<<endl;
+				cout<<"\tbearGrade: "<<bearingGrade<<endl;
+				cout<<"\tTotalScore: "<<score<<endl;
 			}
 
-			//calculate distance and target to each target
-			CalculateDist(targets);
-			CalculateBearing(targets);
-
-			//ID the center in yellow
-			Point center(box.x + box.width / 2, box.y + box.height / 2);
-			line(original, center, center, YELLOW, 3);
-			ostringstream output;
-
-			output << "Dist: " << targets.targetDistance;
-			putText(original, output.str(), Point(center.x + 10, center.y), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
-
-			output.str("");
-			output.clear();
-			output << "Bearing: " << targets.TargetBearing;
-			putText(original, output.str(), Point(center.x + 10, center.y + 15), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
-
-			output.str("");
-			output.clear();
-			output << "Width: " << targets.Target.width;
-			putText(original, output.str(), Point(center.x + 10, center.y + 30), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
-
-			output.str("");
-			output.clear();
-			output << "Angle: " << targets.TargetBoxAngle;
-			putText(original, output.str(), Point(center.x + 10, center.y + 45), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
-
-
 		}
+
+		int i =0;
+		if(contour0Score>contour1Score)
+			i = 0;
+		else if (contour1Score>contour0Score)
+				i=1;
+		else
+			cout<<"No Winner"<<endl;
+
+			//capture corners of contour
+			minRect[i] = minAreaRect(Mat(contours[i]));
+
+			if(params.Visualize)
+			{
+
+				Point2f rect_points[4];
+				minRect[i].points(rect_points);
+				for (int j = 0; j < 4; j++)
+					line(original, rect_points[j], rect_points[(j + 1) % 4], ORANGE, 2, 8);
+			}
+			//define minAreaBox
+			Rect box = minRect[i].boundingRect();
+			targets.TargetBoxAngle = minRect[i].angle;
+
+
+			double WHRatio = box.width / ((double) box.height);
+			double HWRatio = ((double) box.height) / box.width;
+
+			//calculate distance and target to each target
+			double dist = CalculateDist(box.width);
+			double bearing = CalculateBearing(box.x,box.width);
+
+
+			targets.Target = box;
+			targets.TargetBearing = bearing;
+			targets.targetDistance = dist;
+
+
+
+
+//		//set targets
+//		//check if contour is vert, we use HWRatio because it is greater that 0 for vert target
+//			if ((HWRatio > MinVRatio) && (HWRatio < MaxVRatio))
+//			{
+//				targets.Target = box;
+////				targets.VertGoal = true;
+////				targets.VerticalTarget = box;
+////				targets.VerticalAngle = minRect[i].angle;
+////				targets.VerticalCenter = Point(box.x + box.width / 2,
+////						box.y + box.height / 2);
+////				targets.Vertical_H_W_Ratio = HWRatio;
+////				targets.Vertical_W_H_Ratio = WHRatio;
+//
+//			}
+//			//check if contour is horiz, we use WHRatio because it is greater that 0 for vert target
+//			else if ((WHRatio > MinHRatio) && (WHRatio < MaxHRatio))
+//			{
+//				targets.Target = box;
+////				targets.HorizGoal = true;
+////				targets.HorizontalTarget = box;
+////				targets.HorizontalAngle = minRect[i].angle;
+////				targets.HorizontalCenter = Point(box.x + box.width / 2,
+////						box.y + box.height / 2);
+////				targets.Horizontal_H_W_Ratio = HWRatio;
+////				targets.Horizontal_W_H_Ratio = WHRatio;
+//			}
 		
 		//TODO: Add is Target Scorable, angle offset is correct, pick largest box
 
@@ -1242,3 +1295,12 @@ void *MJPEG_host(void *args)
 	return NULL;
 
 }
+
+//Contours have been filtered down to largest two before calling this function
+
+double BestTarget()
+{
+
+	return 0;
+}
+
