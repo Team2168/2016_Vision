@@ -10,7 +10,9 @@
 #define CAMERA_WIDTH_FOV_ANGLE_RAD 0.743879868
 #define ROBOT_ANGLE_OFFSET 0.0
 
-#define MJPEG_SERVER_PORT 8001
+#define LOG_IMAGE true
+
+#define MJPEG_SERVER_PORT 5800
 
 #include "mjpeg_server.h"
 #include <unistd.h>
@@ -103,13 +105,20 @@ void *VideoCap(void *args);
 //GLOBAL CONSTANTS
 const double PI = 3.141592653589793;
 
-//Thresholding parameters
-int minR = 0;
-int maxR = 120;
-int minG = 180; //160 for ip cam, 80 to support MS webcam
-int maxG = 255;
-int minB = 80;
-int maxB = 255;
+////Thresholding parameters
+//int minH = 30;
+//int maxH = 112;
+//int minS = 180; //160 for ip cam, 80 to support MS webcam
+//int maxS = 255;
+//int minV = 20;
+//int maxV = 255;
+
+int minH = 32;
+int maxH = 96;
+int minS = 160; //160 for ip cam, 80 to support MS webcam
+int maxS = 255;
+int minV = 102;
+int maxV = 255;
 
 //Target Ratio Ranges
 double MinHRatio = 1.0;
@@ -500,40 +509,72 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		}
 
 		int i =0;
-		if(contour0Score>contour1Score)
-			i = 0;
-		else if (contour1Score>contour0Score)
+		if(contour0Score>contour1Score && contour0Score > 50)
+			{i = 0;
+			//capture corners of contour
+						minRect[i] = minAreaRect(Mat(contours[i]));
+
+						if(params.Visualize)
+						{
+
+							Point2f rect_points[4];
+							minRect[i].points(rect_points);
+							for (int j = 0; j < 4; j++)
+								line(original, rect_points[j], rect_points[(j + 1) % 4], ORANGE, 2, 8);
+						}
+						//define minAreaBox
+						Rect box = minRect[i].boundingRect();
+						targets.TargetBoxAngle = minRect[i].angle;
+
+
+						double WHRatio = box.width / ((double) box.height);
+						double HWRatio = ((double) box.height) / box.width;
+
+						//calculate distance and target to each target
+						double dist = CalculateDist(box.width);
+						double bearing = CalculateBearing(box.x,box.width);
+
+
+						targets.Target = box;
+						targets.TargetBearing = bearing;
+						targets.targetDistance = dist;
+			}
+		else if (contour1Score>contour0Score && contour1Score > 50)
+		{
 				i=1;
+
+				//capture corners of contour
+							minRect[i] = minAreaRect(Mat(contours[i]));
+
+							if(params.Visualize)
+							{
+
+								Point2f rect_points[4];
+								minRect[i].points(rect_points);
+								for (int j = 0; j < 4; j++)
+									line(original, rect_points[j], rect_points[(j + 1) % 4], ORANGE, 2, 8);
+							}
+							//define minAreaBox
+							Rect box = minRect[i].boundingRect();
+							targets.TargetBoxAngle = minRect[i].angle;
+
+
+							double WHRatio = box.width / ((double) box.height);
+							double HWRatio = ((double) box.height) / box.width;
+
+							//calculate distance and target to each target
+							double dist = CalculateDist(box.width);
+							double bearing = CalculateBearing(box.x,box.width);
+
+
+							targets.Target = box;
+							targets.TargetBearing = bearing;
+							targets.targetDistance = dist;
+		}
 		else
 			cout<<"No Winner"<<endl;
 
-			//capture corners of contour
-			minRect[i] = minAreaRect(Mat(contours[i]));
 
-			if(params.Visualize)
-			{
-
-				Point2f rect_points[4];
-				minRect[i].points(rect_points);
-				for (int j = 0; j < 4; j++)
-					line(original, rect_points[j], rect_points[(j + 1) % 4], ORANGE, 2, 8);
-			}
-			//define minAreaBox
-			Rect box = minRect[i].boundingRect();
-			targets.TargetBoxAngle = minRect[i].angle;
-
-
-			double WHRatio = box.width / ((double) box.height);
-			double HWRatio = ((double) box.height) / box.width;
-
-			//calculate distance and target to each target
-			double dist = CalculateDist(box.width);
-			double bearing = CalculateBearing(box.x,box.width);
-
-
-			targets.Target = box;
-			targets.TargetBearing = bearing;
-			targets.targetDistance = dist;
 
 
 
@@ -609,9 +650,18 @@ Mat ThresholdImage(Mat original)
 	//Local Temp Image
 	Mat thresholded;
 
-	//Threshold image to remove non-green objects
-	inRange(original, Scalar(minB, minG, minR), Scalar(maxB, maxG, maxR),
-			thresholded);
+
+//	//Threshold image to remove non-green objects
+//	inRange(original, Scalar(minB, minG, minR), Scalar(maxB, maxG, maxR),
+//			thresholded);
+
+
+	Mat hsv;
+	cvtColor(original,hsv,COLOR_BGR2HSV);
+	inRange(hsv, Scalar(minH, minS, minV), Scalar(maxH, maxS, maxV),
+				thresholded);
+
+
 
 	//smooth edges
 	blur(thresholded, thresholded, Size(3, 3));
@@ -1025,7 +1075,7 @@ void *VideoCap(void *args)
 		struct timespec start, end, bufferStart, bufferEnd;
 
 		//seconds to wait for buffer to clear before we start main process thread
-		int waitForBufferToClear = 12;
+		int waitForBufferToClear = 15;
 
 		//start timer to time how long it takes to open stream
 		clock_gettime(CLOCK_REALTIME, &start);
