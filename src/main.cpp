@@ -10,8 +10,6 @@
 #define CAMERA_WIDTH_FOV_ANGLE_RAD 0.743879868
 #define ROBOT_ANGLE_OFFSET 0.0
 
-#define LOG_IMAGE true
-
 #define MJPEG_SERVER_PORT 5800
 
 #include "mjpeg_server.h"
@@ -104,6 +102,8 @@ void *VideoCap(void *args);
 
 //GLOBAL CONSTANTS
 const double PI = 3.141592653589793;
+
+int imageSaveCount = 0;
 
 ////Thresholding parameters
 //int minH = 30;
@@ -649,7 +649,6 @@ Mat ThresholdImage(Mat original)
 {
 	//Local Temp Image
 	Mat thresholded;
-
 
 //	//Threshold image to remove non-green objects
 //	inRange(original, Scalar(minB, minG, minR), Scalar(maxB, maxG, maxR),
