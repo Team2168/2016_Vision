@@ -424,25 +424,6 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 			//ID the center in yellow
 			Point center(box.x + box.width / 2, box.y + box.height / 2);
 			line(original, center, center, YELLOW, 3);
-			ostringstream output;
-
-			output << "Dist: " << dist;
-			putText(original, output.str(), Point(center.x + 10, center.y), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
-
-			output.str("");
-			output.clear();
-			output << "Bearing: " << bearing;
-			putText(original, output.str(), Point(center.x + 10, center.y + 15), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
-
-			output.str("");
-			output.clear();
-			output << "Width: " << box.width;
-			putText(original, output.str(), Point(center.x + 10, center.y + 30), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
-
-			output.str("");
-			output.clear();
-			output << "Angle: " << minRect[i].angle;
-			putText(original, output.str(), Point(center.x + 10, center.y + 45), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
 
 
 			const int WEIGHT = 25;
@@ -509,7 +490,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		}
 
 		int i =0;
-		if(contour0Score>contour1Score && contour0Score > 50)
+		if(contour0Score>contour1Score && contour0Score > 65)
 			{i = 0;
 			//capture corners of contour
 						minRect[i] = minAreaRect(Mat(contours[i]));
@@ -539,7 +520,7 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 						targets.TargetBearing = bearing;
 						targets.targetDistance = dist;
 			}
-		else if (contour1Score>contour0Score && contour1Score > 50)
+		else if (contour1Score>contour0Score && contour1Score > 65)
 		{
 				i=1;
 
@@ -573,6 +554,30 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		}
 		else
 			cout<<"No Winner"<<endl;
+
+		if(params.Visualize)
+		{
+			Rect box = minRect[i].boundingRect();
+			Point center(box.x + box.width / 2, box.y + box.height / 2);
+			ostringstream output;
+					output << "Dist: " << targets.targetDistance ;
+					putText(original, output.str(), Point(center.x + 10, center.y), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+					output.str("");
+					output.clear();
+					output << "Bearing: " << targets.TargetBearing;
+					putText(original, output.str(), Point(center.x + 10, center.y + 15), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+					output.str("");
+					output.clear();
+					output << "Width: " << targets.Target;
+					putText(original, output.str(), Point(center.x + 10, center.y + 30), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+
+					output.str("");
+					output.clear();
+					output << "Angle: " << minRect[i].angle;
+					putText(original, output.str(), Point(center.x + 10, center.y + 45), FONT_HERSHEY_PLAIN, 1, WHITE, 1, 1);
+		}
 
 
 
