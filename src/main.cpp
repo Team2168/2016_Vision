@@ -1,6 +1,4 @@
 #define _USE_MATH_DEFINES
-#define MIN_WIDTH 120
-#define Y_IMAGE_RES 240
 #define VIEW_ANGLE 34.8665269
 #define AUTO_STEADY_STATE 1.9
 
@@ -10,7 +8,6 @@
 #define CAMERA_WIDTH_FOV_ANGLE_RAD 0.743879868
 #define ROBOT_ANGLE_OFFSET 0.0
 
-#define MJPEG_SERVER_PORT 5800
 
 #include "mjpeg_server.h"
 #include <unistd.h>
@@ -37,6 +34,7 @@ struct ProgParams
 	string ROBOT_PORT;
 	string CAMERA_IP;
 	string IMAGE_FILE;
+	string MJPEG_STREAM_PORT;
 
 	bool From_Camera;
 	bool From_File;
@@ -103,8 +101,6 @@ void *VideoCap(void *args);
 //GLOBAL CONSTANTS
 const double PI = 3.141592653589793;
 
-int imageSaveCount = 0;
-
 ////Thresholding parameters
 //int minH = 30;
 //int maxH = 112;
@@ -113,11 +109,11 @@ int imageSaveCount = 0;
 //int minV = 20;
 //int maxV = 255;
 
-int minH = 32;
-int maxH = 96;
-int minS = 160; //160 for ip cam, 80 to support MS webcam
-int maxS = 255;
-int minV = 102;
+int minH = 0;
+int maxH = 255;
+int minS = 0; //160 for ip cam, 80 to support MS webcam
+int maxS = 77;
+int minV = 0;
 int maxV = 255;
 
 //Target Ratio Ranges
@@ -146,6 +142,7 @@ pthread_mutex_t mjpegServerFrameMutex = PTHREAD_MUTEX_INITIALIZER;
 
 //GLOBAL MUTEX SIGNAL VARIABLES
 pthread_cond_t newFrameToStreamSignal = PTHREAD_COND_INITIALIZER;
+pthread_cond_t FrameCopyCompleteSignal = PTHREAD_COND_INITIALIZER;
 
 //Thread Variables
 pthread_t TCPthread;
@@ -161,6 +158,7 @@ tcp_client client;
 
 //MJPEG Stream
 mjpeg_server mjpeg_s;
+double MJPEG_SERVER_PORT = 5800;
 
 //Store targets in global variable
 Target targets;
@@ -221,6 +219,7 @@ int main(int argc, const char* argv[])
 			clock_gettime(CLOCK_REALTIME, &start);
 
 			pthread_mutex_lock(&frameMutex);
+			pthread_cond_wait(&FrameCopyCompleteSignal, &frameMutex);
 			if (!frame.empty())
 			{
 				frame.copyTo(img);
@@ -582,8 +581,6 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 
 
 
-
-
 //		//set targets
 //		//check if contour is vert, we use HWRatio because it is greater that 0 for vert target
 //			if ((HWRatio > MinVRatio) && (HWRatio < MaxVRatio))
@@ -629,8 +626,8 @@ void findTarget(Mat original, Mat thresholded, Target& targets, const ProgParams
 		//and wake up any sleeping threads
 		pthread_mutex_lock(&mjpegServerFrameMutex);
 		original.copyTo(imgToStream);
-		pthread_cond_signal(&newFrameToStreamSignal);
 		pthread_mutex_unlock(&mjpegServerFrameMutex);
+		pthread_cond_signal(&newFrameToStreamSignal);
 		//imshow("Contours", original); //Make a rectangle that encompasses the target
 	}
 
@@ -751,6 +748,11 @@ void parseCommandInputs(int argc, const char* argv[], ProgParams& params)
 				params.IMAGE_FILE = string(argv[i + 1]);
 				params.From_Camera = false;
 				params.From_File = true;
+				i++;
+			}
+			else if ((string(argv[i]) == "-mp") && (i + 1 < argc))
+			{
+				MJPEG_SERVER_PORT = atoi(argv[i + 1]);
 				i++;
 			}
 			else if ((string(argv[i]) == "-c") && (i + 1 < argc)) //camera IP
@@ -1066,6 +1068,7 @@ void *VideoCap(void *args)
 		pthread_mutex_lock(&frameMutex);
 		frame = imread(struct_ptr->IMAGE_FILE);
 		pthread_mutex_unlock(&frameMutex);
+		pthread_cond_signal(&FrameCopyCompleteSignal);
 
 		cout<<"File Loaded: Starting Processing Thread"<<endl;
 		progRun = true;
@@ -1176,6 +1179,7 @@ void *VideoCap(void *args)
 			pthread_mutex_lock(&frameMutex);
 			vcap.read(frame);
 			pthread_mutex_unlock(&frameMutex);
+			pthread_cond_signal(&FrameCopyCompleteSignal);
 
 			//end timer to get time per frame
 			clock_gettime(CLOCK_REALTIME, &end);
